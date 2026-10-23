@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body { background: #0B0B0F; color: #ECE8DF; }
+body { font-family: var(--font-sans), system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+::selection { background: #D4AF37; color: #0B0B0F; }
+* { scrollbar-width: thin; scrollbar-color: #2A2A36 transparent; }
+
+@layer components {
+  .panel { @apply rounded-xl border border-line bg-panel; }
+  .panel-pad { @apply rounded-xl border border-line bg-panel p-4; }
+  .h-display { @apply font-display tracking-tight; }
+  .label { @apply text-[11px] uppercase tracking-[0.14em] text-muted; }
+  .input { @apply w-full rounded-lg border border-line bg-panel2 px-3 py-2 text-sm text-[#ECE8DF] outline-none focus:border-gold; }
+  .select { @apply rounded-lg border border-line bg-panel2 px-2 py-1.5 text-sm outline-none focus:border-gold; }
+  .tbl { @apply w-full text-sm; }
+  .tbl th { @apply whitespace-nowrap px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted; }
+  .tbl td { @apply whitespace-nowrap px-2 py-2 border-t border-line; }
+  .tbl tbody tr:hover { @apply bg-panel2; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border border-line bg-panel2 px-2 py-0.5 text-xs; }
+  .link { @apply text-gold hover:text-gold-light underline-offset-2 hover:underline; }
+}
+
+/* Ticket-stub button: notched edges like a cinema ticket. */
+.ticket {
+  --notch: 7px;
+  position: relative;
+  background: linear-gradient(180deg, #E2C158, #C59E2A);
+  color: #16120A;
+  -webkit-mask: radial-gradient(circle var(--notch) at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle var(--notch) at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle var(--notch) at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+}
+.ticket::after { content: ''; position: absolute; top: 18%; bottom: 18%; right: 22px; border-right: 2px dashed rgba(22,18,10,.35); }
+
+/* Marquee lightbulb border for premieres. */
+.marquee { position: relative; }
+.marquee::before {
+  content: ''; position: absolute; inset: -5px; border-radius: 16px; pointer-events: none;
+  background:
+    radial-gradient(circle, #FFE9A3 0 2.2px, transparent 2.6px) 0 0 / 14px 14px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  padding: 4px;
+  animation: bulbs 1.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px #F5D46B);
+}
+.carpet { background: linear-gradient(135deg, #5E0F1C, #9B1B30 60%, #6B1222); }
+.gold-text { background: linear-gradient(180deg,#F4DC86,#C79B2C); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
