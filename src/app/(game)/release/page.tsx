@@ -38,7 +38,7 @@ export default function ReleasePlanner() {
   const marketing = f ? Math.round(f.budget * mkt / 1e5) * 1e5 : 0;
   const forecast = f && type !== 'sold' && type !== 'streaming' ? forecastGross(s, f, { t, screens, marketing, type }) : 0;
   const offer = f && type === 'sold' ? salePrice(s, f, buyer) : 0;
-  const releasesAt = (tt: number) => s.films.filter((x) => x.release && x.release.t === tt && x.release.type !== 'sold');
+  const releasesAt = (tt: number) => s.films.filter((x) => !x.tv && x.release && x.release.t === tt && x.release.type !== 'sold');
 
   const confirm = () => {
     if (!f) return;

@@ -12,7 +12,7 @@ import { advanceProduction } from './production';
 import { advanceRivals } from './rivals';
 import { decayFranchises, refreshIPs, refreshMarketplace } from './scripts';
 import { advanceStreaming } from './streaming';
-import { newTally, pay, setTally } from './util';
+import { newTally, pay, setTally, spend } from './util';
 
 export function advanceTurn(prev: GameState): GameState {
   const s: GameState = structuredClone(prev);
@@ -58,6 +58,27 @@ export function advanceTurn(prev: GameState): GameState {
 
 /** Guaranteed TV seasons deliver each half-year; strong shows can earn the negotiated +1 renewal. */
 function advanceTV(s: GameState) {
+  for (const f of s.films) {
+    const tv = f.tv;
+    if (!tv?.channelId || tv.status === 'complete' || !tv.nextSeasonT || s.t < tv.nextSeasonT) continue;
+    if (tv.seasonsProduced < tv.totalSeasons) {
+      const cost = tv.budgetPerEpisode * tv.episodes;
+      const license = (tv.channelRatePerEpisode ?? 0) * tv.episodes;
+      spend(s, f, cost, 'TV production');
+      pay(s, f.studioId, license, `TV licence · ${tv.channelName ?? 'Channel'}`);
+      f.otherRevenue += license;
+      tv.seasonsProduced++;
+      tv.nextSeasonT += 13;
+      tv.status = 'airing';
+    } else if (tv.renewalOption && tv.totalSeasons === tv.seasonsGuaranteed && f.quality >= 75) {
+      tv.totalSeasons++;
+      tv.nextSeasonT += 13;
+    } else {
+      tv.status = 'complete';
+    }
+    if (tv.seasonsProduced >= tv.totalSeasons && !(tv.renewalOption && tv.totalSeasons === tv.seasonsGuaranteed && f.quality >= 75)) tv.status = 'complete';
+  }
+  // Continue TV deals created by the earlier standalone TV screen in existing saves.
   for (const show of s.series ?? []) {
     if (show.status === 'complete' || s.t < show.nextSeasonT) continue;
     if (show.seasonsProduced < show.totalSeasons) {

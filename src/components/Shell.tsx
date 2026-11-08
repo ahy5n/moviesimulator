@@ -21,7 +21,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: string; 
   ] },
   { group: 'Talent & Production', items: [
     { href: '/talent', label: 'Talent', icon: '☺' }, { href: '/slate', label: 'Production Slate', icon: '▤' },
-    { href: '/release', label: 'Release Planner', icon: '▶' }, { href: '/series', label: 'TV Studio', icon: '▣' },
+    { href: '/release', label: 'Release Planner', icon: '▶' },
   ] },
   { group: 'Market', items: [
     { href: '/boxoffice', label: 'Box Office', icon: '▮' }, { href: '/streaming', label: 'Streaming', icon: '◉' },

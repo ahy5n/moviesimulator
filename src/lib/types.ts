@@ -71,6 +71,7 @@ export type Film = {
   id: string; title: string; studioId: string; logline: string;
   primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone;
   language?: Language;
+  tv?: TVProject;
   stage: Stage; stageTurnsLeft: number; createdT: number;
   budget: number; tier: BudgetTier; suggestedBudget: number; marketing: number;
   scriptQuality: number; scriptRange?: [number, number]; quality: number; qualityKnown: boolean; testRange?: [number, number];
@@ -234,6 +235,14 @@ export type GameState = {
   producer?: { reputation: number };
   idCounter: number;
   stats: { biddingWars: number; sacked: number };
+};
+
+/** Optional TV identity layered onto the regular script, casting and production pipeline. */
+export type TVProject = {
+  format: TVFormat; episodes: number; episodeMinutes: number; budgetPerEpisode: number;
+  seasonsGuaranteed: number; totalSeasons: number; seasonsProduced: number; renewalOption: boolean;
+  channelId?: string; channelName?: string; channelRatePerEpisode?: number; nextSeasonT?: number;
+  status?: 'development' | 'contracted' | 'airing' | 'complete';
 };
 
 export type TVFormat = 'Drama' | 'Comedy' | 'Limited series' | 'Reality' | 'Docuseries' | 'Animation' | 'Competition';

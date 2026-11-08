@@ -1,13 +1,14 @@
 'use client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Bar as RBar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useGame } from '@/store/game';
 import { formatDate, formatShort, yearOf } from '@/lib/calendar';
 import { GENRE_COLORS, MARKET_NAMES, tierInfo } from '@/lib/constants';
 import { COFINANCIERS } from '@/data/studios';
 import { FESTIVALS } from '@/data/awards';
+import { TV_CHANNELS, channelOffer } from '@/data/tvChannels';
 import { AWARD_BODIES } from '@/data/awards';
 import { money } from '@/lib/format';
 import { talent } from '@/lib/talentDb';
@@ -38,6 +39,21 @@ export default function FilmPage() {
   const qb = mine && !released ? qualityBreakdown(s, f) : null;
   const year = yearOf(s.t);
   const festOptions = FESTIVALS.map((x) => ({ ...x, t: s.t - (s.t % 26) + x.turn })).filter((x) => x.t >= s.t);
+  const signTVContract = (channelId: string) => act((d) => {
+    const project = filmById(d, f.id);
+    const channel = TV_CHANNELS.find((x) => x.id === channelId);
+    if (!project?.tv || !channel || project.stage !== 'ready' || project.tv.channelId) return;
+    const offer = channelOffer(d, project, channel);
+    project.tv.channelId = channel.id;
+    project.tv.channelName = channel.name;
+    project.tv.channelRatePerEpisode = offer.rate;
+    project.tv.seasonsProduced = 1;
+    project.tv.nextSeasonT = d.t + 13;
+    project.tv.status = project.tv.seasonsGuaranteed > 1 || project.tv.renewalOption ? 'airing' : 'complete';
+    project.stage = 'released';
+    project.otherRevenue += offer.advance;
+    pay(d, project.studioId, offer.advance, `TV licence · ${channel.name}`);
+  });
 
   return (
     <div>
@@ -45,13 +61,15 @@ export default function FilmPage() {
         <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: `linear-gradient(90deg, ${GENRE_COLORS[f.primaryGenre]}, ${GENRE_COLORS[f.secondaryGenre ?? f.primaryGenre]}, transparent)` }} />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="label">{st.name}</div>
+            <div className="label">{st.name} · {f.tv ? 'Television' : 'Feature film'}</div>
             <h1 className="font-marquee text-4xl leading-none tracking-wide text-[#F7F1E0] sm:text-5xl">{f.title}</h1>
             <p className="mt-2 max-w-2xl text-sm italic text-[#CFC9BC]">“{f.logline}”</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Badge color={GENRE_COLORS[f.primaryGenre]}>{f.primaryGenre}</Badge>{f.secondaryGenre && <Badge color={GENRE_COLORS[f.secondaryGenre]}>{f.secondaryGenre}</Badge>}
+            {f.tv && <Badge color="#60a5fa">TV series · {f.tv.format}</Badge>}
               <Badge>{f.tone}</Badge><Badge>{f.tier}</Badge><Badge>{stageLabel(f)}</Badge>
               <Badge>🗣 {f.language ?? 'English'}</Badge>
+              {f.tv && <><Badge>{f.tv.episodes} × {f.tv.episodeMinutes} min</Badge><Badge>{f.tv.seasonsGuaranteed} season{f.tv.seasonsGuaranteed === 1 ? '' : 's'} contracted</Badge></>}
               {f.franchiseId && <Badge color="#D4AF37">{s.franchises.find((x) => x.id === f.franchiseId)?.name}</Badge>}
               {f.chinaBlocked && <Badge color="#F87171">No China release</Badge>}
               {f.soldTo && <Badge>Sold to {studioById(s, f.soldTo)?.name}</Badge>}
@@ -66,11 +84,23 @@ export default function FilmPage() {
       {msg && <div className="mb-4 rounded-lg border border-amber-800 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">{msg}</div>}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Total cost" value={money(released ? f.spent : totalCost(f))} sub={`Production ${money(f.budget)}${f.overrun ? ` (+${Math.round(f.overrun * 100)}% overrun)` : ''}`} />
-        <Stat label="Worldwide gross" value={money(f.gross)} sub={f.inTheatres ? `Week ${f.weeksOut} in cinemas` : f.release ? formatDate(f.release.t) : '—'} tone="gold" />
+        <Stat label={f.tv ? 'Season production cost' : 'Total cost'} value={money(released ? f.spent : totalCost(f))} sub={`Production ${money(f.budget)}${f.overrun ? ` (+${Math.round(f.overrun * 100)}% overrun)` : ''}`} />
+        {f.tv ? <Stat label="TV licence revenue" value={money(f.otherRevenue)} sub={f.tv.channelName ?? 'Awaiting channel contract'} tone="gold" /> : <Stat label="Worldwide gross" value={money(f.gross)} sub={f.inTheatres ? `Week ${f.weeksOut} in cinemas` : f.release ? formatDate(f.release.t) : '—'} tone="gold" />}
         <Stat label="Studio revenue" value={money(filmRevenue(f))} sub="Rentals, licensing, streaming, sales" />
         <Stat label="Profit" value={money(filmProfit(f))} tone={filmProfit(f) >= 0 ? 'good' : 'bad'} sub={released ? 'to date' : 'spent so far'} />
       </div>
+
+      {f.tv && f.tv.channelId && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-sky-900/70 bg-sky-950/20 px-4 py-3 text-sm"><span className="text-sky-200">Contracted to {f.tv.channelName}</span><span className="chip">Season {Math.min(f.tv.seasonsProduced, f.tv.totalSeasons)} of {f.tv.totalSeasons}</span><span className="chip">{f.tv.episodes} episodes × {f.tv.episodeMinutes} min</span><span className="ml-auto text-muted">{f.tv.status === 'complete' ? 'Run complete' : 'Next season in production'}</span></div>}
+
+      {mine && f.tv && f.stage === 'ready' && !f.tv.channelId && <Panel title="Channel contracts" className="mt-5" right={<span className="chip">Production complete · choose a buyer</span>}>
+        <div className="mb-4 rounded-lg border border-line bg-panel2 p-3 text-sm text-muted">Your {f.tv.format.toLowerCase()} is finished. All offers use the cast, genre and language on this production. The first season licence fee is paid when you sign.</div>
+        <div className="grid gap-3 md:grid-cols-2">{TV_CHANNELS.map((channel) => { const offer = channelOffer(s, f, channel); return <article key={channel.id} className="channel-card rounded-xl border border-line bg-panel2 p-4" style={{ '--channel': channel.color } as CSSProperties}>
+          <div className="flex items-start justify-between gap-2"><div><h3 className="font-display text-lg font-bold">{channel.name}</h3><div className="mt-1 flex flex-wrap gap-1"><span className="chip">★ {channel.prestige} prestige</span><span className="chip">{channel.genres.includes(f.primaryGenre) ? 'Genre fit' : 'Broader audience'}</span><span className="chip">{channel.languages.includes(f.language ?? 'English') ? 'Language fit' : 'Global reach'}</span></div></div><span className="text-xs" style={{ color: channel.color }}>CHANNEL</span></div>
+          <div className="my-3 grid grid-cols-2 gap-2"><div><div className="label">Per episode</div><div className="font-semibold">{money(offer.rate)}</div></div><div><div className="label">Season 1 licence</div><div className="font-semibold text-emerald-300">{money(offer.advance)}</div></div></div>
+          <div className="mb-3 text-xs text-muted">Contract: {f.tv.seasonsGuaranteed} guaranteed season{f.tv.seasonsGuaranteed === 1 ? '' : 's'}{f.tv.renewalOption ? ' + one-season renewal option' : ''} · quality estimate {offer.quality}</div>
+          <Button className="w-full" onClick={() => signTVContract(channel.id)}>Sign with {channel.name}</Button>
+        </article>; })}</div>
+      </Panel>}
 
       {mine && !released && f.stage !== 'shelved' && (
         <Panel title="Production" className="mt-5">
@@ -85,7 +115,7 @@ export default function FilmPage() {
           {(f.stage === 'development' || f.stage === 'preproduction') && (
             <div className="space-y-4">
               <Field label={`Production budget — ${money(f.budget)} (${f.tier})`} hint={`Script suggests ${money(f.suggestedBudget)}. Spending less hurts quality.`}>
-                <input type="range" min={Math.max(3e5, f.suggestedBudget * 0.5)} max={f.suggestedBudget * 1.5} step={1e5} value={f.budget} onChange={(e) => act((d) => setBudget(filmById(d, f.id)!, Number(e.target.value)))} className="w-full accent-[#D4AF37]" />
+                <input type="range" min={Math.max(3e5, f.suggestedBudget * 0.5)} max={f.suggestedBudget * 1.5} step={1e5} value={f.budget} onChange={(e) => act((d) => { const project = filmById(d, f.id)!; setBudget(project, Number(e.target.value)); if (project.tv) project.tv.budgetPerEpisode = project.budget / project.tv.episodes; })} className="w-full accent-[#D4AF37]" />
               </Field>
               <div className="flex flex-wrap items-center gap-2">
                 <LinkButton href={`/casting/${f.id}`} variant="gold">Casting & crew</LinkButton>
@@ -113,10 +143,10 @@ export default function FilmPage() {
               {!f.testRange && <Button variant="ghost" onClick={() => act((d) => testScreening(d, filmById(d, f.id)!))}>Test screening ({money(testScreeningCost(f))})</Button>}
               {f.testRange && <span className="chip">Test screening: {f.testRange[0]}–{f.testRange[1]}</span>}
               {f.testRange && !f.events.some((e) => e.startsWith('Reshoots')) && <Button variant="ghost" onClick={() => act((d) => reshoots(d, filmById(d, f.id)!))}>Order reshoots ({money(reshootCost(f))})</Button>}
-              {f.stage === 'ready' && <LinkButton href={`/release?film=${f.id}`} variant="gold">{f.release ? `Releases ${formatShort(f.release.t)}` : 'Plan release'}</LinkButton>}
+                {f.stage === 'ready' && !f.tv && <LinkButton href={`/release?film=${f.id}`} variant="gold">{f.release ? `Releases ${formatShort(f.release.t)}` : 'Plan release'}</LinkButton>}
             </div>
           )}
-          {(f.stage === 'post' || f.stage === 'ready') && !f.festival && festOptions.length > 0 && (
+          {(f.stage === 'post' || f.stage === 'ready') && !f.tv && !f.festival && festOptions.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted">Premiere at a festival ($150K):</span>
               {festOptions.map((x) => <Button key={x.id} size="sm" variant="ghost" disabled={s.festivalEntries.some((e) => e.filmId === f.id)} onClick={() => setMsg(act((d) => enterFestival(d, f.id, x.id)) ?? `Entered in the ${x.name}.`)}>{x.name} ({x.month})</Button>)}

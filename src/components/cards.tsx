@@ -77,7 +77,8 @@ export function FilmCard({ f, s, premiere }: { f: Film; s: GameState; premiere?:
       <div className="panel relative h-full overflow-hidden p-3 transition hover:border-gold/60">
         <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${c}, transparent)` }} />
         <div className="font-marquee text-xl leading-tight tracking-wide text-[#F3EEDF]">{f.title}</div>
-        <div className="mt-0.5 text-xs text-muted">{f.primaryGenre}{f.secondaryGenre ? ` / ${f.secondaryGenre}` : ''} · {f.tier}</div>
+        <div className="mt-0.5 text-xs text-muted">{f.tv ? 'TV series · ' : ''}{f.primaryGenre}{f.secondaryGenre ? ` / ${f.secondaryGenre}` : ''} · {f.tier}</div>
+        {f.tv && <div className="mt-1 text-[10px] text-gold">{f.tv.episodes} episodes · {f.tv.episodeMinutes} min · {f.tv.seasonsGuaranteed} season{f.tv.seasonsGuaranteed === 1 ? '' : 's'} guaranteed</div>}
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="chip">{stageLabel(f)}{f.stage === 'development' || f.stage === 'filming' || f.stage === 'post' ? ` · ${f.stageTurnsLeft} fn` : ''}</span>
           {f.release && f.release.t >= s.t && <span className="text-gold">{formatShort(f.release.t)}</span>}

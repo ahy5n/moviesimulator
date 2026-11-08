@@ -41,6 +41,10 @@ export default function Slate() {
           );
         })}
       </div>
+      {!!s.series?.length && <div className="mt-2 rounded-xl border border-line bg-panel p-4">
+        <div className="mb-3 flex items-center justify-between"><h2 className="font-marquee text-lg tracking-wider text-gold">Earlier TV contracts</h2><span className="text-xs text-muted">These contracts were made before TV joined the production pipeline.</span></div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{s.series.map((show) => <div key={show.id} className="rounded-lg border border-line bg-panel2 p-3"><div className="flex items-center justify-between gap-2"><span className="font-semibold">{show.title}</span><span className="chip">{show.genre}</span></div><div className="mt-1 text-xs text-muted">{show.channelName} · {show.language} · {show.episodes} × {show.episodeMinutes} min</div><div className="mt-2 text-xs">Season {show.seasonsProduced} / {show.totalSeasons} · {money(show.revenue)} licence revenue</div></div>)}</div>
+      </div>}
     </div>
   );
 }
