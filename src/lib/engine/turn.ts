@@ -60,7 +60,16 @@ export function advanceTurn(prev: GameState): GameState {
 function advanceTV(s: GameState) {
   for (const f of s.films) {
     const tv = f.tv;
-    if (!tv?.channelId || tv.status === 'complete' || !tv.nextSeasonT || s.t < tv.nextSeasonT) continue;
+    if (!tv) continue;
+    tv.popularity ??= Math.max(15, Math.round(f.quality * .65));
+    if (tv.contractEndsT && s.t >= tv.contractEndsT && tv.rightsOwner !== 'studio') {
+      tv.rightsOwner = 'studio'; tv.rightsBuyer = 'Your studio'; tv.distribution = 'unreleased'; tv.channelId = undefined; tv.status = 'complete'; tv.contractEndsT = undefined;
+    }
+    if (!tv.lastSeasonT && tv.seasonsProduced) tv.lastSeasonT = tv.nextSeasonT ?? s.t;
+    if (tv.status === 'complete' || !tv.nextSeasonT || s.t < tv.nextSeasonT) {
+      if (tv.seasonsProduced && s.t - (tv.lastSeasonT ?? s.t) > 1) tv.popularity = Math.max(0, tv.popularity - (tv.rightsOwner === 'studio' ? .22 : .05));
+      continue;
+    }
     if (tv.seasonsProduced < tv.totalSeasons) {
       const cost = tv.budgetPerEpisode * tv.episodes;
       const license = (tv.channelRatePerEpisode ?? 0) * tv.episodes;
@@ -68,15 +77,14 @@ function advanceTV(s: GameState) {
       pay(s, f.studioId, license, `TV licence · ${tv.channelName ?? 'Channel'}`);
       f.otherRevenue += license;
       tv.seasonsProduced++;
+      tv.lastSeasonT = s.t;
+      tv.popularity = Math.max(0, Math.min(100, tv.popularity + (f.quality >= 70 ? 6 : 1) - Math.max(0, tv.seasonFatigue ?? 0) * 2));
       tv.nextSeasonT += 13;
       tv.status = 'airing';
-    } else if (tv.renewalOption && tv.totalSeasons === tv.seasonsGuaranteed && f.quality >= 75) {
-      tv.totalSeasons++;
-      tv.nextSeasonT += 13;
     } else {
       tv.status = 'complete';
     }
-    if (tv.seasonsProduced >= tv.totalSeasons && !(tv.renewalOption && tv.totalSeasons === tv.seasonsGuaranteed && f.quality >= 75)) tv.status = 'complete';
+    if (tv.seasonsProduced >= tv.totalSeasons) tv.status = 'complete';
   }
   // Continue TV deals created by the earlier standalone TV screen in existing saves.
   for (const show of s.series ?? []) {

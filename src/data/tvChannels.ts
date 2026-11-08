@@ -8,6 +8,12 @@ export const TV_CHANNELS: TVChannel[] = [
   { id: 'world', name: 'WorldView', color: '#4ade80', genres: [...GENRES], languages: [...LANGUAGES], prestige: 64, ratePerEpisode: 880_000 },
 ];
 
+export const STREAMERS = [
+  { id: 'crown-stream', name: 'Crown+', color: '#d8b35a', genres: ['Drama','Crime','Romance','Fantasy'] as Genre[], languages: ['English','French','German'] as Language[], prestige: 88, ratePerEpisode: 1_800_000 },
+  { id: 'orbit-stream', name: 'Orbit Stream', color: '#60a5fa', genres: ['Sci-Fi','Fantasy','Animation','Action','Documentary'] as Genre[], languages: ['English','Japanese','Korean','Mandarin'] as Language[], prestige: 78, ratePerEpisode: 1_350_000 },
+  { id: 'world-stream', name: 'WorldView Play', color: '#4ade80', genres: [...GENRES], languages: [...LANGUAGES], prestige: 68, ratePerEpisode: 980_000 },
+];
+
 export function channelOffer(s: GameState, f: Film, channel: TVChannel) {
   const genreFit = channel.genres.includes(f.primaryGenre) ? 1.12 : 0.78;
   const languageFit = channel.languages.includes(f.language ?? 'English') ? 1.12 : 0.82;

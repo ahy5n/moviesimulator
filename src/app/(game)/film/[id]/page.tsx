@@ -8,7 +8,7 @@ import { formatDate, formatShort, yearOf } from '@/lib/calendar';
 import { GENRE_COLORS, MARKET_NAMES, tierInfo } from '@/lib/constants';
 import { COFINANCIERS } from '@/data/studios';
 import { FESTIVALS } from '@/data/awards';
-import { TV_CHANNELS, channelOffer } from '@/data/tvChannels';
+import { TV_CHANNELS, STREAMERS, channelOffer } from '@/data/tvChannels';
 import { AWARD_BODIES } from '@/data/awards';
 import { money } from '@/lib/format';
 import { talent } from '@/lib/talentDb';
@@ -43,7 +43,7 @@ export default function FilmPage() {
   const signTVContract = (channelId: string) => act((d) => {
     const project = filmById(d, f.id);
     const channel = TV_CHANNELS.find((x) => x.id === channelId);
-    if (!project?.tv || !channel || project.stage !== 'ready' || project.tv.channelId) return;
+    if (!project?.tv || !channel || !['ready','released'].includes(project.stage) || project.tv.rightsOwner !== 'studio') return;
     const offer = channelOffer(d, project, channel);
     project.tv.channelId = channel.id;
     project.tv.channelName = channel.name;
@@ -51,10 +51,29 @@ export default function FilmPage() {
     project.tv.seasonsProduced = 1;
     project.tv.nextSeasonT = d.t + 13;
     project.tv.status = project.tv.seasonsGuaranteed > 1 || project.tv.renewalOption ? 'airing' : 'complete';
+    project.tv.rightsOwner = 'channel'; project.tv.rightsBuyer = channel.name; project.tv.distribution = 'channel';
+    project.tv.contractEndsT = d.t + 26 * project.tv.seasonsGuaranteed; project.tv.popularity ??= Math.max(20, Math.round(offer.quality * 0.7));
+    project.tv.contractHistory ??= []; project.tv.contractHistory.push({ buyer: channel.name, kind: 'channel', endsT: project.tv.contractEndsT, value: offer.advance });
     project.stage = 'released';
     project.otherRevenue += offer.advance;
     pay(d, project.studioId, offer.advance, `TV licence · ${channel.name}`);
   });
+  const signStreamContract = (buyer: typeof STREAMERS[number], years: number) => act((d) => {
+    const project = filmById(d, f.id); const series = project?.tv; if (!project || !series || !['ready','released'].includes(project.stage) || series.rightsOwner !== 'studio') return;
+    const fit = buyer.genres.includes(project.primaryGenre) ? 1.15 : 0.8;
+    const lang = buyer.languages.includes(project.language ?? 'English') ? 1.15 : 0.82;
+    const ask = Math.round(buyer.ratePerEpisode * fit * lang * (0.65 + (series.popularity ?? project.quality) / 200) * series.episodes * years);
+    const offer = Math.round(ask * (0.8 + Math.random() * 0.4));
+    if (offer < ask * 0.85) return;
+    series.rightsOwner = 'streamer'; series.rightsBuyer = buyer.name; series.distribution = 'streaming';
+    series.contractEndsT = d.t + years * 26; series.popularity = Math.min(100, (series.popularity ?? 50) + 8);
+    series.contractHistory ??= []; series.contractHistory.push({ buyer: buyer.name, kind: 'streaming', endsT: series.contractEndsT, value: offer });
+    project.stage = 'released'; project.otherRevenue += offer; pay(d, project.studioId, offer, `${years}-year streaming licence · ${buyer.name}`);
+  });
+  const keepOnService = () => act((d) => { const p=filmById(d,f.id); if(!p?.tv)return; p.tv.rightsOwner='studio'; p.tv.rightsBuyer='Your streaming service'; p.tv.distribution='owned'; p.tv.contractEndsT=undefined; p.tv.popularity=Math.min(100,(p.tv.popularity??50)+4); p.stage='released'; });
+  const renewSeason = () => act((d) => { const p=filmById(d,f.id); const x=p?.tv; if(!p||!x)return; x.totalSeasons++; x.seasonFatigue=(x.seasonFatigue??0)+1; x.popularity=Math.max(0,(x.popularity??50)-Math.max(0,x.seasonFatigue-2)*7); x.nextSeasonT=d.t+13; x.status='airing'; });
+  const buyBack = () => act((d) => { const p=filmById(d,f.id); if(!p?.tv || (p.tv.popularity??0)<25)return; const price=Math.round(p.tv.budgetPerEpisode*p.tv.episodes*3*(p.tv.popularity??50)/50); if(d.studio.cash<price)return; pay(d,p.studioId,-price,`TV rights buyback · ${p.title}`); p.tv.rightsOwner='studio'; p.tv.rightsBuyer='Your studio'; p.tv.distribution='owned'; p.tv.contractEndsT=undefined; });
+  const reboot = () => act((d) => { const p=filmById(d,f.id); if(!p?.tv)return; if(d.t-(p.tv.lastSeasonT??p.tv.contractEndsT??d.t)<104)return; p.tv.rebootedAt=d.t;p.tv.popularity=Math.min(100,(p.tv.popularity??20)+30);p.tv.seasonFatigue=0;p.tv.totalSeasons++;p.tv.nextSeasonT=d.t+13;p.tv.status='airing'; });
 
   return (
     <div>
@@ -93,7 +112,7 @@ export default function FilmPage() {
 
       {f.tv && f.tv.channelId && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-sky-900/70 bg-sky-950/20 px-4 py-3 text-sm"><span className="text-sky-200">Contracted to {f.tv.channelName}</span><span className="chip">Season {Math.min(f.tv.seasonsProduced, f.tv.totalSeasons)} of {f.tv.totalSeasons}</span><span className="chip">{f.tv.episodes} episodes × {f.tv.episodeMinutes} min</span><span className="ml-auto text-muted">{f.tv.status === 'complete' ? 'Run complete' : 'Next season in production'}</span></div>}
 
-      {mine && tv && f.stage === 'ready' && !tv.channelId && <Panel title="Channel contracts" className="mt-5" right={<span className="chip">Production complete · choose a buyer</span>}>
+      {mine && tv && (f.stage === 'ready' || f.stage === 'released') && tv.rightsOwner === 'studio' && <Panel title="Post-production · sell or keep the rights" className="mt-5" right={<span className="chip">Distribution desk</span>}>
         <div className="mb-4 rounded-lg border border-line bg-panel2 p-3 text-sm text-muted">Your {tv.format.toLowerCase()} is finished. All offers use the cast, genre and language on this production. The first season licence fee is paid when you sign.</div>
         <div className="grid gap-3 md:grid-cols-2">{TV_CHANNELS.map((channel) => { const offer = channelOffer(s, f, channel); return <article key={channel.id} className="channel-card rounded-xl border border-line bg-panel2 p-4" style={{ '--channel': channel.color } as CSSProperties}>
           <div className="flex items-start justify-between gap-2"><div><h3 className="font-display text-lg font-bold">{channel.name}</h3><div className="mt-1 flex flex-wrap gap-1"><span className="chip">★ {channel.prestige} prestige</span><span className="chip">{channel.genres.includes(f.primaryGenre) ? 'Genre fit' : 'Broader audience'}</span><span className="chip">{channel.languages.includes(f.language ?? 'English') ? 'Language fit' : 'Global reach'}</span></div></div><span className="text-xs" style={{ color: channel.color }}>CHANNEL</span></div>
@@ -101,7 +120,11 @@ export default function FilmPage() {
           <div className="mb-3 text-xs text-muted">Contract: {tv.seasonsGuaranteed} guaranteed season{tv.seasonsGuaranteed === 1 ? '' : 's'}{tv.renewalOption ? ' + one-season renewal option' : ''} · quality estimate {offer.quality}</div>
           <Button className="w-full" onClick={() => signTVContract(channel.id)}>Sign with {channel.name}</Button>
         </article>; })}</div>
+        <h3 className="mt-6 mb-2 font-display text-lg">Streaming deals · negotiate 1–5 year terms</h3><div className="grid gap-3 md:grid-cols-2">{STREAMERS.map((buyer)=>{const fit=(buyer.genres.includes(f.primaryGenre)?1.15:.8)*(buyer.languages.includes(f.language??'English')?1.15:.82);const estimate=Math.round(buyer.ratePerEpisode*fit*(.65+(tv.popularity??f.quality)/200)*tv.episodes);return <article key={buyer.id} className="rounded-xl border border-line bg-panel2 p-4"><b>{buyer.name}</b><p className="my-2 text-sm text-muted">Estimated annual licence {money(estimate)} · term and fee are negotiated on signing.</p>{[1,3,5].map(years=><Button key={years} size="sm" className="mr-2" onClick={()=>signStreamContract(buyer,years)}>{years} year{years===1?'':'s'}</Button>)}</article>})}</div>
+        <Button className="mt-4" variant="secondary" onClick={keepOnService}>Keep it for our streaming service</Button>
       </Panel>}
+
+      {mine && tv && tv.rightsOwner && <Panel title="TV rights & next season" className="mt-5"><p className="mb-3 text-sm">Rights: <b>{tv.rightsBuyer}</b> · popularity {tv.popularity??50}/100 · seasons {tv.seasonsProduced} produced{tv.seasonFatigue?` · fatigue ${tv.seasonFatigue}`:''}{tv.contractEndsT?` · contract ends in ${Math.max(0,Math.ceil((tv.contractEndsT-s.t)/26))} years`:''}</p><div className="flex flex-wrap gap-2">{tv.rightsOwner==='studio'&&<Button onClick={renewSeason}>Renew for another season</Button>}{tv.rightsOwner==='channel'&&tv.contractEndsT&&s.t>=tv.contractEndsT&&<Button onClick={buyBack}>Buy back rights</Button>}{tv.rightsOwner==='channel'&&<Button variant="secondary" onClick={buyBack}>Buy back for our service</Button>}{tv.rightsOwner==='streamer'&&<Button variant="secondary" onClick={keepOnService}>Keep rights when deal ends</Button>}{tv.rightsOwner==='studio'&&<Button variant="secondary" onClick={keepOnService}>Put on our streaming service</Button>}{tv.rightsOwner==='studio'&&<Button variant="secondary" onClick={()=>act(d=>{const p=filmById(d,f.id);if(p?.tv){p.tv.originalShowId=p.id;p.tv.popularity=Math.min(100,(p.tv.popularity??50)+5)}})}>Develop a spin-off</Button>}{tv.rightsOwner==='studio'&&<Button variant="secondary" onClick={()=>act(d=>{const p=filmById(d,f.id);if(p?.tv){p.language=p.language==='English'?'Spanish':'English';p.tv.popularity=Math.min(100,(p.tv.popularity??50)+3)}})}>Remake in {f.language==='English'?'Spanish':'English'}</Button>}<Button variant="secondary" onClick={reboot}>Reboot after 4+ years</Button></div>{tv.contractHistory?.map((c,i)=><div key={i} className="mt-2 text-xs text-muted">{c.kind} · {c.buyer} · {money(c.value)}</div>)}</Panel>}
 
       {mine && !released && f.stage !== 'shelved' && (
         <Panel title="Production" className="mt-5">

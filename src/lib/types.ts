@@ -243,6 +243,11 @@ export type TVProject = {
   seasonsGuaranteed: number; totalSeasons: number; seasonsProduced: number; renewalOption: boolean;
   channelId?: string; channelName?: string; channelRatePerEpisode?: number; nextSeasonT?: number;
   status?: 'development' | 'contracted' | 'airing' | 'complete';
+  popularity?: number; lastSeasonT?: number; seasonFatigue?: number;
+  rightsOwner?: 'studio' | 'channel' | 'streamer'; rightsBuyer?: string; contractEndsT?: number;
+  distribution?: 'unreleased' | 'channel' | 'streaming' | 'owned'; pendingRenewal?: boolean;
+  contractHistory?: { buyer: string; kind: string; endsT: number; value: number }[];
+  rebootedAt?: number; originalShowId?: string;
 };
 
 export type TVFormat = 'Drama' | 'Comedy' | 'Limited series' | 'Reality' | 'Docuseries' | 'Animation' | 'Competition';
