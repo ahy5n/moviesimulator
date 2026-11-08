@@ -37,6 +37,7 @@ export default function TalentProfile() {
         <div className="min-w-0 flex-1">
           <h1 className="h-display text-3xl font-bold">{t.name}</h1>
           <div className="mt-1 text-sm text-muted">{flag(t.nationality)} {countryName(t.nationality)} · Age {ageAt(t.birthDate, s.t)} · <span className="capitalize">{t.kind === 'actor' ? (t.gender === 'F' ? 'actress' : 'actor') : t.kind}</span>{t.isFictional ? ' · fictional' : ''}{ov?.retired ? ' · retired' : ''}</div>
+          {t.kind === 'actor' && <div className="mt-2 flex flex-wrap gap-1.5">{(t.languages ?? ['English']).map((language) => <span className="chip" key={language}>🗣 {language}</span>)}</div>}
           <div className="mt-2 flex flex-wrap gap-1.5">{t.traits.map((tr) => <span key={tr} className="chip" title={TRAIT_INFO[tr]}>{tr}</span>)}</div>
         </div>
         <div className="text-right">

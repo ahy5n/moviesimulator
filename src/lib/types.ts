@@ -5,6 +5,8 @@ export const GENRES = [
   'Fantasy', 'Superhero', 'Musical', 'War', 'Western', 'Crime', 'Documentary', 'Family',
 ] as const;
 export type Genre = (typeof GENRES)[number];
+export const LANGUAGES = ['English', 'Spanish', 'French', 'Hindi', 'Tamil', 'Telugu', 'Korean', 'Japanese', 'Mandarin', 'Cantonese', 'Arabic', 'Portuguese', 'German', 'Italian', 'Turkish', 'Urdu', 'Yoruba', 'Bengali', 'Other'] as const;
+export type Language = (typeof LANGUAGES)[number];
 
 export const MARKETS = ['US', 'UK', 'EU', 'CN', 'IN', 'JP', 'KR', 'LATAM', 'ME', 'ROW'] as const;
 export type Market = (typeof MARKETS)[number];
@@ -30,6 +32,7 @@ export type Credit = { title: string; year: number; billing: number; inGame?: bo
 export type Talent = {
   id: string; tmdbId?: number; name: string; isFictional: boolean; kind: TalentKind;
   birthDate: string; gender: Gender; nationality: string; // ISO-3166 alpha-2
+  languages?: Language[];
   attrs: Attrs;
   genres: Record<Genre, number>;
   regional: Record<Market, number>;
@@ -67,6 +70,7 @@ export type AwardResult = { year: number; body: string; category: string; talent
 export type Film = {
   id: string; title: string; studioId: string; logline: string;
   primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone;
+  language?: Language;
   stage: Stage; stageTurnsLeft: number; createdT: number;
   budget: number; tier: BudgetTier; suggestedBudget: number; marketing: number;
   scriptQuality: number; scriptRange?: [number, number]; quality: number; qualityKnown: boolean; testRange?: [number, number];
@@ -204,6 +208,7 @@ export type GameState = {
   t: number; settings: GameSettings;
   studio: Studio; rivals: Studio[];
   films: Film[];
+  series: TVSeries[];
   scripts: Script[]; // marketplace
   ips: IP[];
   franchises: Franchise[];
@@ -229,4 +234,13 @@ export type GameState = {
   producer?: { reputation: number };
   idCounter: number;
   stats: { biddingWars: number; sacked: number };
+};
+
+export type TVFormat = 'Drama' | 'Comedy' | 'Limited series' | 'Reality' | 'Docuseries' | 'Animation' | 'Competition';
+export type TVChannel = { id: string; name: string; color: string; genres: Genre[]; languages: Language[]; prestige: number; ratePerEpisode: number };
+export type TVSeries = {
+  id: string; title: string; format: TVFormat; genre: Genre; language: Language; episodes: number; episodeMinutes: number;
+  budgetPerEpisode: number; quality: number; channelId: string; channelName: string; seasonsGuaranteed: number;
+  renewalOption: boolean; totalSeasons: number; seasonsProduced: number; nextSeasonT: number; status: 'in-production' | 'airing' | 'complete';
+  castIds: string[]; revenue: number; spent: number; createdT: number;
 };

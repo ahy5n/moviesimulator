@@ -2,7 +2,7 @@
 import { ageAt } from './calendar';
 import { clamp } from './rng';
 import { feeFor, overallOf } from './ratings';
-import { GENRES, MARKETS, type Genre, type GameState, type Market, type Talent, type TalentKind } from './types';
+import { GENRES, MARKETS, type Genre, type GameState, type Market, type Talent, type TalentKind, type Language } from './types';
 
 /** On-disk compact format, keeps the JSON small. */
 export type CompactPerson = {
@@ -30,8 +30,10 @@ export function fromCompact(c: CompactPerson): Talent {
   GENRES.forEach((g, i) => (genres[g] = c.ge[i]));
   const regional = {} as Record<Market, number>;
   MARKETS.forEach((m, i) => (regional[m] = c.re[i]));
+  const languageByCountry: Record<string, Language> = { US: 'English', GB: 'English', CA: 'English', AU: 'English', IN: 'Hindi', KR: 'Korean', JP: 'Japanese', CN: 'Mandarin', HK: 'Cantonese', FR: 'French', ES: 'Spanish', MX: 'Spanish', BR: 'Portuguese', DE: 'German', IT: 'Italian', TR: 'Turkish', NG: 'Yoruba', PK: 'Urdu', BD: 'Bengali' };
   return {
     id: c.i, tmdbId: c.d, name: c.n, isFictional: !!c.f, kind: c.k, birthDate: c.b, gender: c.g, nationality: c.c,
+    languages: [languageByCountry[c.c] ?? 'English'],
     attrs: { ...base, overall: overallOf(base, c.k) }, genres, regional, traits: c.tr as Talent['traits'], potential: c.p,
     fee: c.fee, backendDemand: c.bd, credits: c.cr.map(([title, year, billing]) => ({ title, year, billing })), debutYear: c.dy,
   };

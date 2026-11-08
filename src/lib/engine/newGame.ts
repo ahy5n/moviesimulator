@@ -27,7 +27,7 @@ export function newGame(o: NewGameOptions): GameState {
       id: c.id, name: c.name, color: c.color, initials: c.initials, hq: c.hq, cash: c.cash, prestige: c.prestige, isPlayer: false,
       personality: c.personality, rivalSubs: c.startSubs, streamName: c.streamName,
     })),
-    films: [], scripts: [], ips: [], franchises: [], talentOverrides: {}, newTalent: [], commitments: {}, negotiations: {},
+    films: [], series: [], scripts: [], ips: [], franchises: [], talentOverrides: {}, newTalent: [], commitments: {}, negotiations: {},
     genreHeat: heat, loans: [], inbox: [], ceremonies: [], festivalEntries: [], history: [], ledger: {},
     bailoutUsed: false, jobHistory: [{ studioName: o.name, fromT: 0 }], producer: { reputation: 0 }, idCounter: 1, stats: { biddingWars: 0, sacked: 0 },
   };

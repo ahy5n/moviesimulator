@@ -51,6 +51,7 @@ export default function FilmPage() {
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Badge color={GENRE_COLORS[f.primaryGenre]}>{f.primaryGenre}</Badge>{f.secondaryGenre && <Badge color={GENRE_COLORS[f.secondaryGenre]}>{f.secondaryGenre}</Badge>}
               <Badge>{f.tone}</Badge><Badge>{f.tier}</Badge><Badge>{stageLabel(f)}</Badge>
+              <Badge>🗣 {f.language ?? 'English'}</Badge>
               {f.franchiseId && <Badge color="#D4AF37">{s.franchises.find((x) => x.id === f.franchiseId)?.name}</Badge>}
               {f.chinaBlocked && <Badge color="#F87171">No China release</Badge>}
               {f.soldTo && <Badge>Sold to {studioById(s, f.soldTo)?.name}</Badge>}

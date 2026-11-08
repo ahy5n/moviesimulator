@@ -9,7 +9,7 @@ import { makeRng } from '@/lib/rng';
 import { allTalent, genreFit, isAvailable } from '@/lib/talentDb';
 import { genPremises, genTitle } from '@/lib/titles';
 import { commissionScript } from '@/lib/engine/scripts';
-import { GENRES, type BudgetTier, type Genre, type Tone } from '@/lib/types';
+import { GENRES, LANGUAGES, type BudgetTier, type Genre, type Language, type Tone } from '@/lib/types';
 import { Button, Field, PageHeader, Panel } from '@/components/ui';
 import { Avatar, OvrBadge } from '@/components/cards';
 
@@ -17,6 +17,7 @@ export default function Develop() {
   const { state: s, act } = useGame();
   const router = useRouter();
   const [g, setG] = useState<Genre>('Thriller');
+  const [language, setLanguage] = useState<Language>('English');
   const [g2, setG2] = useState<Genre | ''>('');
   const [tone, setTone] = useState<Tone>('balanced');
   const [tier, setTier] = useState<BudgetTier>('Mid');
@@ -41,7 +42,7 @@ export default function Develop() {
 
   const go = () => {
     const f = act((d) => commissionScript(d, { genre: g, genre2: g2 || undefined, tone, tier, premise: premises[premiseIdx], writerId, turns, title: title || suggestedTitle }));
-    if (f) router.push(`/film/${f.id}`);
+    if (f) { act((d) => { const film = d.films.find((x) => x.id === f.id); if (film) film.language = language; }); router.push(`/film/${f.id}`); }
   };
 
   return (
@@ -57,6 +58,7 @@ export default function Develop() {
             <Field label="Tone">
               <div className="grid grid-cols-3 gap-2">{(['light', 'balanced', 'dark'] as Tone[]).map((t) => <button key={t} onClick={() => setTone(t)} className={`rounded-lg border px-3 py-2 text-sm capitalize ${tone === t ? 'border-gold bg-gold/10' : 'border-line bg-panel2'}`}>{t}</button>)}</div>
             </Field>
+            <Field label="Primary language"><select className="select w-full" value={language} onChange={(e) => setLanguage(e.target.value as Language)}>{LANGUAGES.map((x) => <option key={x}>{x}</option>)}</select></Field>
             <Field label="Budget tier">
               <div className="grid grid-cols-5 gap-1.5">{TIERS.map((t) => <button key={t.tier} onClick={() => setTier(t.tier)} className={`rounded-lg border px-1 py-2 text-xs ${tier === t.tier ? 'border-gold bg-gold/10' : 'border-line bg-panel2'}`}>{t.tier}<div className="text-[10px] text-muted">{money(t.min, 0)}+</div></button>)}</div>
             </Field>

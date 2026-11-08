@@ -12,7 +12,7 @@ import { advanceProduction } from './production';
 import { advanceRivals } from './rivals';
 import { decayFranchises, refreshIPs, refreshMarketplace } from './scripts';
 import { advanceStreaming } from './streaming';
-import { newTally, setTally } from './util';
+import { newTally, pay, setTally } from './util';
 
 export function advanceTurn(prev: GameState): GameState {
   const s: GameState = structuredClone(prev);
@@ -23,6 +23,7 @@ export function advanceTurn(prev: GameState): GameState {
   try {
     // 1. Simulate the fortnight that is ending.
     advanceProduction(s);
+    advanceTV(s);
     advanceBoxOffice(s);
     advanceWindows(s, (f) => {
       judgeResult(s, f);
@@ -53,6 +54,24 @@ export function advanceTurn(prev: GameState): GameState {
   s.lastSummary = { t: s.t - 1, cashStart, cashEnd: s.studio.cash, income: tally.income, expenses: tally.expenses, headlines: tally.headlines };
   s.savedAt = Date.now();
   return s;
+}
+
+/** Guaranteed TV seasons deliver each half-year; strong shows can earn the negotiated +1 renewal. */
+function advanceTV(s: GameState) {
+  for (const show of s.series ?? []) {
+    if (show.status === 'complete' || s.t < show.nextSeasonT) continue;
+    if (show.seasonsProduced < show.totalSeasons) {
+      const cost = show.budgetPerEpisode * show.episodes;
+      const license = show.revenue / Math.max(1, show.seasonsProduced);
+      show.spent += cost; show.revenue += license;
+      pay(s, s.studio.id, -cost, 'TV production');
+      pay(s, s.studio.id, license, `TV licence · ${show.channelName}`);
+      show.seasonsProduced++; show.nextSeasonT += 13;
+    } else if (show.renewalOption && show.totalSeasons === show.seasonsGuaranteed && show.quality >= 70) {
+      show.totalSeasons++; show.nextSeasonT += 13;
+    } else show.status = 'complete';
+    if (show.seasonsProduced >= show.totalSeasons && !(show.renewalOption && show.totalSeasons === show.seasonsGuaranteed && show.quality >= 70)) show.status = 'complete';
+  }
 }
 
 function yearEnd(s: GameState) {

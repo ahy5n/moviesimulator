@@ -86,6 +86,7 @@ function blankFilm(s: GameState, sc: Script, studioId: string): Film {
   return {
     id: nextId(s, 'f'), title: sc.title, studioId, logline: sc.logline,
     primaryGenre: sc.primaryGenre, secondaryGenre: sc.secondaryGenre, tone: sc.tone,
+    language: 'English',
     stage: 'development', stageTurnsLeft: 1, createdT: s.t,
     budget: sc.suggestedBudget, tier: sc.tier, suggestedBudget: sc.suggestedBudget, marketing: 0,
     scriptQuality: sc.quality, scriptRange: sc.source === 'market' ? [sc.low, sc.high] : undefined, quality: 0, qualityKnown: false,

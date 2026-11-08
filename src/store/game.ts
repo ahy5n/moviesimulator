@@ -44,6 +44,8 @@ export const useGame = create<Store>((set, get) => ({
     await get().ensureDB();
     const s = await loadGame(slot);
     if (!s) return false;
+    // Older save slots predate television productions.
+    s.series ??= [];
     set({ state: s, showSummary: false });
     try { localStorage.setItem(LAST_SLOT, slot); } catch { /* ignore */ }
     return true;
