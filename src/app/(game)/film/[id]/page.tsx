@@ -39,6 +39,7 @@ export default function FilmPage() {
   const qb = mine && !released ? qualityBreakdown(s, f) : null;
   const year = yearOf(s.t);
   const festOptions = FESTIVALS.map((x) => ({ ...x, t: s.t - (s.t % 26) + x.turn })).filter((x) => x.t >= s.t);
+  const tv = f.tv;
   const signTVContract = (channelId: string) => act((d) => {
     const project = filmById(d, f.id);
     const channel = TV_CHANNELS.find((x) => x.id === channelId);
@@ -92,12 +93,12 @@ export default function FilmPage() {
 
       {f.tv && f.tv.channelId && <div className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-sky-900/70 bg-sky-950/20 px-4 py-3 text-sm"><span className="text-sky-200">Contracted to {f.tv.channelName}</span><span className="chip">Season {Math.min(f.tv.seasonsProduced, f.tv.totalSeasons)} of {f.tv.totalSeasons}</span><span className="chip">{f.tv.episodes} episodes × {f.tv.episodeMinutes} min</span><span className="ml-auto text-muted">{f.tv.status === 'complete' ? 'Run complete' : 'Next season in production'}</span></div>}
 
-      {mine && f.tv && f.stage === 'ready' && !f.tv.channelId && <Panel title="Channel contracts" className="mt-5" right={<span className="chip">Production complete · choose a buyer</span>}>
-        <div className="mb-4 rounded-lg border border-line bg-panel2 p-3 text-sm text-muted">Your {f.tv.format.toLowerCase()} is finished. All offers use the cast, genre and language on this production. The first season licence fee is paid when you sign.</div>
+      {mine && tv && f.stage === 'ready' && !tv.channelId && <Panel title="Channel contracts" className="mt-5" right={<span className="chip">Production complete · choose a buyer</span>}>
+        <div className="mb-4 rounded-lg border border-line bg-panel2 p-3 text-sm text-muted">Your {tv.format.toLowerCase()} is finished. All offers use the cast, genre and language on this production. The first season licence fee is paid when you sign.</div>
         <div className="grid gap-3 md:grid-cols-2">{TV_CHANNELS.map((channel) => { const offer = channelOffer(s, f, channel); return <article key={channel.id} className="channel-card rounded-xl border border-line bg-panel2 p-4" style={{ '--channel': channel.color } as CSSProperties}>
           <div className="flex items-start justify-between gap-2"><div><h3 className="font-display text-lg font-bold">{channel.name}</h3><div className="mt-1 flex flex-wrap gap-1"><span className="chip">★ {channel.prestige} prestige</span><span className="chip">{channel.genres.includes(f.primaryGenre) ? 'Genre fit' : 'Broader audience'}</span><span className="chip">{channel.languages.includes(f.language ?? 'English') ? 'Language fit' : 'Global reach'}</span></div></div><span className="text-xs" style={{ color: channel.color }}>CHANNEL</span></div>
           <div className="my-3 grid grid-cols-2 gap-2"><div><div className="label">Per episode</div><div className="font-semibold">{money(offer.rate)}</div></div><div><div className="label">Season 1 licence</div><div className="font-semibold text-emerald-300">{money(offer.advance)}</div></div></div>
-          <div className="mb-3 text-xs text-muted">Contract: {f.tv.seasonsGuaranteed} guaranteed season{f.tv.seasonsGuaranteed === 1 ? '' : 's'}{f.tv.renewalOption ? ' + one-season renewal option' : ''} · quality estimate {offer.quality}</div>
+          <div className="mb-3 text-xs text-muted">Contract: {tv.seasonsGuaranteed} guaranteed season{tv.seasonsGuaranteed === 1 ? '' : 's'}{tv.renewalOption ? ' + one-season renewal option' : ''} · quality estimate {offer.quality}</div>
           <Button className="w-full" onClick={() => signTVContract(channel.id)}>Sign with {channel.name}</Button>
         </article>; })}</div>
       </Panel>}
