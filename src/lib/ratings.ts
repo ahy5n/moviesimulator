@@ -1,5 +1,6 @@
 // Rating formulas shared by the TMDB build script and the fictional-talent generator.
 import { makeRng, clamp } from './rng';
+import { COUNTRY_LANG, LANG_MARKETS, deriveLanguages } from './languages';
 import { GENRES, MARKETS, TRAITS, type Attrs, type Gender, type Genre, type Market, type Talent, type TalentKind, type Trait } from './types';
 
 export type RawCredit = {
@@ -27,25 +28,7 @@ export function mapGenres(ids: number[], title: string, revenue = 0): Genre[] {
   return [...set];
 }
 
-/** Language of a filmography → home market weights. */
-const LANG_MARKETS: Record<string, Partial<Record<Market, number>>> = {
-  en: { US: 1, UK: 1, EU: 0.75, LATAM: 0.7, ME: 0.6, ROW: 0.7, JP: 0.55, KR: 0.55, CN: 0.5, IN: 0.45 },
-  hi: { IN: 1, ME: 0.85, UK: 0.5, ROW: 0.45, US: 0.25 }, te: { IN: 0.95, ME: 0.6, US: 0.2 },
-  ta: { IN: 0.9, ME: 0.6, ROW: 0.4 }, ml: { IN: 0.8, ME: 0.75 }, kn: { IN: 0.75, ME: 0.4 },
-  ur: { ME: 0.9, IN: 0.6, UK: 0.5, ROW: 0.5 }, pa: { IN: 0.7, UK: 0.5, ME: 0.5 }, bn: { IN: 0.7, ROW: 0.4 },
-  ko: { KR: 1, JP: 0.6, CN: 0.4, ROW: 0.5, US: 0.25 }, zh: { CN: 1, ROW: 0.55, KR: 0.3, JP: 0.3 },
-  cn: { CN: 0.95, ROW: 0.6, KR: 0.3 }, ja: { JP: 1, KR: 0.4, CN: 0.35, ROW: 0.3 },
-  fr: { EU: 1, UK: 0.4, ME: 0.4, ROW: 0.35, US: 0.25 }, es: { LATAM: 1, EU: 0.75, US: 0.4 },
-  pt: { LATAM: 0.9, EU: 0.5 }, de: { EU: 0.9 }, it: { EU: 0.9 }, tr: { ME: 0.8, EU: 0.4 }, ar: { ME: 1 },
-  yo: { ROW: 0.9 }, ig: { ROW: 0.85 }, ha: { ROW: 0.8 }, fa: { ME: 0.8 }, th: { ROW: 0.6 }, id: { ROW: 0.6 },
-};
-
-/** Nationality → language fallback when we only know where someone was born. */
-export const COUNTRY_LANG: Record<string, string> = {
-  US: 'en', GB: 'en', CA: 'en', AU: 'en', IE: 'en', NZ: 'en', IN: 'hi', PK: 'ur', KR: 'ko', CN: 'zh', HK: 'cn', TW: 'zh',
-  JP: 'ja', FR: 'fr', BE: 'fr', ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es', PE: 'es', VE: 'es', CU: 'es', BR: 'pt',
-  NG: 'en', GH: 'en', ZA: 'en', KE: 'en', DE: 'de', IT: 'it', TR: 'tr', EG: 'ar', AE: 'ar', LB: 'ar', IR: 'fa', TH: 'th', ID: 'id',
-};
+export { COUNTRY_LANG } from './languages';
 
 const W_TRAITS: [Trait, number][] = [
   ['Reliable', 20], ['Team Player', 18], ['Workaholic', 12], ['Perfectionist', 10], ['Method', 8], ['Loyal', 10],
@@ -148,6 +131,7 @@ export function rateFromCareer(p: RawPerson, refYear = 2026): Talent {
   const nationality = p.nationality || 'US';
   const langCount: Record<string, number> = {};
   for (const c of credits) if (c.language) langCount[c.language] = (langCount[c.language] ?? 0) + 1;
+  const languages = deriveLanguages(nationality, starPower, makeRng('lang', id), { ...langCount });
   const homeLang = COUNTRY_LANG[nationality] ?? 'en';
   langCount[homeLang] = (langCount[homeLang] ?? 0) + Math.max(2, total * 0.2);
   const langTotal = Object.values(langCount).reduce((a, b) => a + b, 0);
@@ -164,7 +148,7 @@ export function rateFromCareer(p: RawPerson, refYear = 2026): Talent {
 
   return {
     id, tmdbId: p.tmdbId, name: p.name, isFictional: false, kind: p.kind,
-    birthDate: birth, gender: p.gender === 1 ? 'F' : p.gender === 2 ? 'M' : 'X', nationality,
+    birthDate: birth, gender: p.gender === 1 ? 'F' : p.gender === 2 ? 'M' : 'X', nationality, languages,
     attrs: { ...base, overall }, genres, regional, traits, potential,
     fee: feeFor(starPower, boxOffice, p.kind), backendDemand: isActor ? backendFor(starPower) : 0,
     credits: credits.slice(0, 10).map((c) => ({ title: c.title, year: c.year, billing: c.order + 1 })),
@@ -208,6 +192,7 @@ export function fictionalPerson(opts: {
   return {
     id: opts.id, name: opts.name, isFictional: true, kind: opts.kind,
     birthDate: `${opts.birthYear}-${month}-${day}`, gender: opts.gender, nationality: opts.nationality,
+    languages: deriveLanguages(opts.nationality, starPower, makeRng('lang', opts.id)),
     attrs: { ...base, overall }, genres, regional, traits, potential,
     fee: feeFor(starPower, boxOffice, opts.kind), backendDemand: opts.kind === 'actor' ? backendFor(starPower) : 0,
     credits: [], debutYear: opts.year,

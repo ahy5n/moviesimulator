@@ -2,14 +2,25 @@
 import { monthOf, turnInYear } from '../calendar';
 import { MONTH_HEAT, tierInfo } from '../constants';
 import { makeRng, clamp, type RNG } from '../rng';
+import { pickLanguage, speaks } from '../languages';
 import { genreFit, getDB, isAvailable, talent } from '../talentDb';
 import { GENRES, MARKETS, type BudgetTier, type CrewRole, type Film, type GameState, type Genre, type Studio, type Talent } from '../types';
 import { askingFee, sign } from './negotiation';
+import { dealBlock } from './deals';
+import { writersStrike } from './shocks';
 import { computeQuality, greenlight } from './production';
 import { budgetFor, genScript } from './scripts';
 import { salePrice } from './boxoffice';
 import { STREAMER_BUYERS } from '@/data/studios';
 import { msg, nextId, spend } from './util';
+
+/** Studios that mostly work outside English. */
+export const RIVAL_LANGUAGE: Record<string, (r: RNG) => string> = {
+  yrf: (r) => (r.chance(0.9) ? 'hi' : 'en'),
+  netflix: (r) => (r.chance(0.3) ? pickLanguage(r) : 'en'),
+  amazon: (r) => (r.chance(0.15) ? pickLanguage(r) : 'en'),
+  neon: (r) => (r.chance(0.3) ? r.pick(['fr', 'ko', 'es', 'de', 'ja']) : 'en'),
+};
 
 const ACTIVE: Film['stage'][] = ['development', 'preproduction', 'filming', 'post', 'ready'];
 
@@ -32,17 +43,24 @@ function chooseTalent(s: GameState, r: RNG, pool: Talent[], f: Film, maxFee: num
   for (let i = 0; i < samples; i++) {
     const base = pool[Math.floor(r() * pool.length)];
     if (!base || !isAvailable(s, base.id)) continue;
-    if (f.cast.some((c) => c.talentId === base.id)) continue;
+    if (f.cast.some((c) => c.talentId === base.id) || dealBlock(s, base.id, f.studioId)) continue;
     const t = talent(s, base.id)!;
     if (t.fee > maxFee) continue;
-    const score = 0.45 * genreFit(t, f.primaryGenre, f.secondaryGenre) + 0.35 * t.attrs.overall + starBias * t.attrs.starPower + r.range(0, 8);
+    const score = 0.45 * genreFit(t, f.primaryGenre, f.secondaryGenre) + 0.35 * t.attrs.overall + starBias * t.attrs.starPower + r.range(0, 8) - (speaks(t.languages, f.language) ? 0 : 30);
     if (score > bestScore) { bestScore = score; best = t; }
   }
   return best;
 }
 
 function castRivalFilm(s: GameState, st: Studio, f: Film, r: RNG) {
-  const P = pools(s);
+  const P0 = pools(s);
+  // Non-English films cast from people who speak the language when possible.
+  const local = (list: Talent[]) => {
+    if (!f.language || f.language === 'en') return list;
+    const fl = list.filter((t) => speaks(t.languages, f.language));
+    return fl.length >= 15 ? fl : list;
+  };
+  const P = { ...P0, actors: local(P0.actors), directors: local(P0.directors) };
   const big = f.tier === 'High' || f.tier === 'Tentpole';
   const sign1 = (t: Talent | undefined, role: 'lead' | 'support' | CrewRole) => {
     if (!t) return;
@@ -65,7 +83,7 @@ export function startRivalProject(s: GameState, st: Studio, r: RNG): Film | unde
   const p = st.personality!;
   // Sometimes snap up a marketplace script the player was eyeing.
   let script = undefined as ReturnType<typeof genScript> | undefined;
-  const fromMarket = s.scripts.filter((x) => (p.genres[x.primaryGenre] ?? 0) >= 1.2 && x.quality >= 55);
+  const fromMarket = s.scripts.filter((x) => !x.dealBy && (p.genres[x.primaryGenre] ?? 0) >= 1.2 && x.quality >= 55);
   if (fromMarket.length && r.chance(0.3)) {
     script = r.pick(fromMarket);
     s.scripts = s.scripts.filter((x) => x.id !== script!.id);
@@ -75,12 +93,13 @@ export function startRivalProject(s: GameState, st: Studio, r: RNG): Film | unde
     script = genScript(s, r);
     for (let i = 0; i < 6 && script.primaryGenre !== g; i++) script = genScript(s, r);
     script.quality = clamp(Math.round(script.quality + p.prestige * 8 - 3 + r.normal(0, 4)), 10, 97);
+    script.language = RIVAL_LANGUAGE[st.id]?.(r) ?? (r.chance(0.06) ? pickLanguage(r) : 'en');
   }
   const tier: BudgetTier = r.pick(p.budgetBias);
   const budget = budgetFor(r, tier);
   const f: Film = {
     id: nextId(s, 'f'), title: script.title, studioId: st.id, logline: script.logline,
-    primaryGenre: script.primaryGenre, secondaryGenre: script.secondaryGenre, tone: script.tone,
+    primaryGenre: script.primaryGenre, secondaryGenre: script.secondaryGenre, tone: script.tone, language: script.language ?? 'en',
     stage: 'development', stageTurnsLeft: r.int(1, 3), createdT: s.t,
     budget, tier, suggestedBudget: budget, marketing: 0, scriptQuality: script.quality, quality: 0, qualityKnown: false,
     leads: script.leads, supports: script.supports, cast: [], crew: { writer: { talentId: script.writerId, fee: 0 } },
@@ -130,7 +149,7 @@ export function advanceRivals(s: GameState) {
     const active = s.films.filter((f) => f.studioId === st.id && ACTIVE.includes(f.stage));
     // New projects at the configured slate rate.
     const capacity = Math.ceil(p.slate * 0.75);
-    if (active.length < capacity && r.chance(Math.min(0.95, p.slate / 26 * 1.6))) startRivalProject(s, st, r);
+    if (!writersStrike(s) && active.length < capacity && r.chance(Math.min(0.95, p.slate / 26 * 1.6))) startRivalProject(s, st, r);
     for (const f of active) {
       if (f.stage === 'preproduction') {
         castRivalFilm(s, st, f, r);

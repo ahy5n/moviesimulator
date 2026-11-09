@@ -60,7 +60,8 @@ function botTurn(s: GameState) {
 function castFilm(s: GameState, f: Film, r: ReturnType<typeof makeRng>) {
   const pick = (kind: 'actor' | 'director', maxFee: number) => {
     const pool = allTalent(s, kind).filter((t) => isAvailable(s, t.id) && t.fee <= maxFee && !f.cast.some((c) => c.talentId === t.id));
-    pool.sort((a, b) => (genreFit(b, f.primaryGenre, f.secondaryGenre) + b.attrs.overall) - (genreFit(a, f.primaryGenre, f.secondaryGenre) + a.attrs.overall));
+    const fit = (t: (typeof pool)[number]) => genreFit(t, f.primaryGenre, f.secondaryGenre) + t.attrs.overall - ((t.languages ?? []).includes(f.language ?? 'en') ? 0 : 60);
+    pool.sort((a, b) => fit(b) - fit(a));
     return pool[r.int(0, Math.min(5, pool.length - 1))];
   };
   const deal = (id: string, role: 'lead' | 'support' | 'director') => {

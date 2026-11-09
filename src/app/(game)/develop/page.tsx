@@ -1,8 +1,11 @@
 'use client';
 import Link from 'next/link';
+import { LANGUAGE_CODES, langName } from '@/lib/languages';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useGame } from '@/store/game';
+import { dealBlock, dealFeeMult, dealFor } from '@/lib/engine/deals';
+import { writersStrike } from '@/lib/engine/shocks';
 import { GENRE_COLORS, TIERS } from '@/lib/constants';
 import { money } from '@/lib/format';
 import { makeRng } from '@/lib/rng';
@@ -19,6 +22,7 @@ export default function Develop() {
   const [g, setG] = useState<Genre>('Thriller');
   const [g2, setG2] = useState<Genre | ''>('');
   const [tone, setTone] = useState<Tone>('balanced');
+  const [language, setLanguage] = useState('en');
   const [tier, setTier] = useState<BudgetTier>('Mid');
   const [roll, setRoll] = useState(0);
   const [premiseIdx, setPremiseIdx] = useState(0);
@@ -31,16 +35,17 @@ export default function Develop() {
   const suggestedTitle = useMemo(() => s ? genTitle(makeRng(s.seed, s.t, 'title', g, g2, roll), g, g2 || undefined) : '', [s, g, g2, roll]);
   const writers = useMemo(() => {
     if (!s) return [];
-    return allTalent(s, 'writer').filter((w) => isAvailable(s, w.id) && (!q || w.name.toLowerCase().includes(q.toLowerCase())))
-      .map((w) => ({ w, fit: Math.round(0.55 * w.attrs.acting + 0.45 * genreFit(w, g, g2 || undefined)) }))
+    return allTalent(s, 'writer').filter((w) => isAvailable(s, w.id) && !dealBlock(s, w.id, s.studio.id) && (!q || w.name.toLowerCase().includes(q.toLowerCase())))
+      .map((w) => ({ w, fit: Math.round(0.55 * w.attrs.acting + 0.45 * genreFit(w, g, g2 || undefined)) - ((w.languages ?? []).includes(language) ? 0 : 8) }))
       .sort((a, b) => b.fit - a.fit).slice(0, 40);
-  }, [s, g, g2, q]);
+  }, [s, g, g2, q, language]);
   if (!s) return null;
   const writer = writers.find((x) => x.w.id === writerId)?.w;
-  const fee = writer ? Math.round(writer.fee * (0.7 + turns * 0.15) / 10_000) * 10_000 : 0;
+  const fee = writer ? Math.round(writer.fee * (0.7 + turns * 0.15) * dealFeeMult(s, writer.id, s.studio.id) / 10_000) * 10_000 : 0;
+  const strike = writersStrike(s);
 
   const go = () => {
-    const f = act((d) => commissionScript(d, { genre: g, genre2: g2 || undefined, tone, tier, premise: premises[premiseIdx], writerId, turns, title: title || suggestedTitle }));
+    const f = act((d) => commissionScript(d, { genre: g, genre2: g2 || undefined, tone, tier, premise: premises[premiseIdx], writerId, turns, title: title || suggestedTitle, language }));
     if (f) router.push(`/film/${f.id}`);
   };
 
@@ -54,6 +59,7 @@ export default function Develop() {
               <Field label="Primary genre"><select className="select w-full" value={g} onChange={(e) => setG(e.target.value as Genre)}>{GENRES.map((x) => <option key={x}>{x}</option>)}</select></Field>
               <Field label="Secondary (optional)"><select className="select w-full" value={g2} onChange={(e) => setG2(e.target.value as Genre | '')}><option value="">—</option>{GENRES.filter((x) => x !== g).map((x) => <option key={x}>{x}</option>)}</select></Field>
             </div>
+            <Field label="Language" hint="Sells best where it's spoken. Cast who don't speak it hurt quality."><select className="select w-full" value={language} onChange={(e) => setLanguage(e.target.value)}>{LANGUAGE_CODES.map((l) => <option key={l} value={l}>{langName(l)}</option>)}</select></Field>
             <Field label="Tone">
               <div className="grid grid-cols-3 gap-2">{(['light', 'balanced', 'dark'] as Tone[]).map((t) => <button key={t} onClick={() => setTone(t)} className={`rounded-lg border px-3 py-2 text-sm capitalize ${tone === t ? 'border-gold bg-gold/10' : 'border-line bg-panel2'}`}>{t}</button>)}</div>
             </Field>
@@ -75,7 +81,7 @@ export default function Develop() {
             {writers.map(({ w, fit }) => (
               <button key={w.id} onClick={() => setWriterId(w.id)} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left ${writerId === w.id ? 'border-gold bg-gold/10' : 'border-line bg-panel2 hover:border-gold/40'}`}>
                 <Avatar t={w} size={36} />
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{w.name}</span><span className="text-xs text-muted">Fit {fit} · <span style={{ color: GENRE_COLORS[g] }}>{g}</span> {w.genres[g]}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{w.name}{dealFor(s, w.id)?.studioId === s.studio.id && <span className="ml-1 text-xs text-gold">· your deal</span>}</span><span className="text-xs text-muted">Fit {fit} · <span style={{ color: GENRE_COLORS[g] }}>{g}</span> {w.genres[g]}</span></span>
                 <OvrBadge value={w.attrs.overall} size="sm" />
                 <span className="w-16 text-right text-xs text-gold">{money(w.fee)}</span>
               </button>
@@ -88,8 +94,9 @@ export default function Develop() {
           </div>
           <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
             <div className="text-sm">{writer ? <>Writer fee <span className="font-semibold text-gold">{money(fee)}</span></> : <span className="text-muted">Pick a writer</span>}</div>
-            <Button variant="ticket" onClick={go} disabled={!writer || s.studio.cash < fee}>Commission</Button>
+            <Button variant="ticket" onClick={go} disabled={!writer || s.studio.cash < fee || strike} title={strike ? "The writers are on strike" : undefined}>Commission</Button>
           </div>
+          {strike && <p className="mt-2 text-xs text-amber-300">The writers are on strike. Nothing can be written until it ends.</p>}
           <p className="mt-3 text-xs text-muted">Adapting a book, game or comic? Buy rights in <Link href="/ip" className="link">IP & Franchises</Link>.</p>
         </Panel>
       </div>

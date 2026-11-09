@@ -5,6 +5,8 @@ import { tierInfo } from '../constants';
 import type { BiddingWar, CrewRole, Film, GameState, Negotiation, Talent } from '../types';
 import { filmById, msg, nextId, spend, studioById } from './util';
 import { setCommit } from './scripts';
+import { dealBlock, dealFeeMult } from './deals';
+import { feeShockMult } from './shocks';
 import { loyaltyAppeal, loyaltyDiscount, loyaltyTo, PICKY_BYPASS_AT, SKIP_WAR_AT } from './loyalty';
 
 export type Role = 'lead' | 'support' | CrewRole;
@@ -28,6 +30,7 @@ export function askingFee(s: GameState, t: Talent, film: Film, role: Role, studi
     if (slot) fee = Math.max(fee, slot.fee) * (slot.options > 1 ? 1.1 : 1.4);
   }
   fee *= 1 - loyaltyDiscount(t, loyaltyTo(s, t.id, studioId).total);
+  fee *= dealFeeMult(s, t.id, studioId) * feeShockMult(s);
   return Math.max(20_000, Math.round(fee / 10_000) * 10_000);
 }
 
@@ -47,6 +50,8 @@ export type NegResult = { kind: 'opened'; neg: Negotiation } | { kind: 'bidding'
 
 export function canApproach(s: GameState, t: Talent, film: Film): string | null {
   if (!isAvailable(s, t.id)) return `${t.name} is busy until later.`;
+  const exclusive = dealBlock(s, t.id, film.studioId);
+  if (exclusive) return exclusive;
   const walked = s.talentOverrides[t.id]?.walkedUntil;
   if (walked && walked > s.t) return `${t.name}'s agent isn't taking your calls for a while.`;
   if (film.cast.some((c) => c.talentId === t.id)) return 'Already cast.';

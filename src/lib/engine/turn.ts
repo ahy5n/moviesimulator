@@ -12,7 +12,13 @@ import { advanceProduction } from './production';
 import { advanceRivals } from './rivals';
 import { decayFranchises, refreshIPs, refreshMarketplace } from './scripts';
 import { advanceStreaming } from './streaming';
+import { advanceSeries } from './tv';
+import { advanceRivalTV, pruneRivalTV } from './tvRivals';
 import { newTally, setTally } from './util';
+import { advanceDeals } from './deals';
+import { advanceFacilities } from './facilities';
+import { advanceMerch } from './merch';
+import { advanceShocks } from './shocks';
 
 export function advanceTurn(prev: GameState): GameState {
   const s: GameState = structuredClone(prev);
@@ -22,7 +28,10 @@ export function advanceTurn(prev: GameState): GameState {
   const cashStart = s.studio.cash;
   try {
     // 1. Simulate the fortnight that is ending.
+    advanceShocks(s);
     advanceProduction(s);
+    advanceRivalTV(s);
+    advanceSeries(s);
     advanceBoxOffice(s);
     advanceWindows(s, (f) => {
       judgeResult(s, f);
@@ -32,6 +41,9 @@ export function advanceTurn(prev: GameState): GameState {
     advanceStreaming(s);
     advanceRivals(s);
     advanceFinance(s);
+    advanceFacilities(s);
+    advanceDeals(s);
+    advanceMerch(s);
     talentEvents(s);
     studioEvents(s);
     decayFranchises(s);
@@ -65,6 +77,7 @@ function yearEnd(s: GameState) {
   generateNewcomers(s);
   retirements(s);
   refreshIPs(s);
+  pruneRivalTV(s);
   if (s.board) setBoardTargets(s);
   // Trim old rival data to keep saves small.
   const cutoff = s.t - 26 * 4;

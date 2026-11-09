@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { langName } from '@/lib/languages';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useGame } from '@/store/game';
@@ -8,6 +9,7 @@ import { money } from '@/lib/format';
 import { talent } from '@/lib/talentDb';
 import { buyCoverage, buyScript, coverageCost } from '@/lib/engine/scripts';
 import { marketPulse } from '@/lib/selectors';
+import { writersStrike } from '@/lib/engine/shocks';
 import { GENRES } from '@/lib/types';
 import { Badge, Button, Empty, PageHeader } from '@/components/ui';
 
@@ -29,13 +31,16 @@ export default function Scripts() {
           <select className="select" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="quality">Best quality</option><option value="price">Cheapest</option><option value="budget">Smallest budget</option></select>
         </>
       } />
+      {writersStrike(s) && <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">The writers are on strike. No new scripts will come onto the market until it ends.</div>}
       {!list.length && <Empty>No scripts match. Check back next fortnight.</Empty>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {list.map((sc) => {
           const w = talent(s, sc.writerId);
+          const by = sc.dealBy ? talent(s, sc.dealBy) : undefined;
           const afford = s.studio.cash >= sc.price;
           return (
-            <div key={sc.id} className="panel flex flex-col p-4">
+            <div key={sc.id} className={`panel flex flex-col p-4 ${by ? 'border-gold/60' : ''}`}>
+              {by && <div className="mb-2 text-xs text-gold">Pitched to you by <Link href={`/talent/${by.id}`} className="link">{by.name}</Link> under your deal{by.kind === 'director' ? ' · wants to direct' : ''}</div>}
               <div className="mb-1 flex items-start justify-between gap-2">
                 <h3 className="font-marquee text-2xl leading-tight tracking-wide">{sc.title}</h3>
                 <span className="shrink-0 text-xs text-muted">{sc.expires - s.t <= 1 ? 'Last chance' : `${sc.expires - s.t} fn left`}</span>
@@ -44,6 +49,7 @@ export default function Scripts() {
                 <Badge color={GENRE_COLORS[sc.primaryGenre]}>{sc.primaryGenre}{pulse[sc.primaryGenre] >= 1.12 ? ' 🔥' : ''}</Badge>
                 {sc.secondaryGenre && <Badge color={GENRE_COLORS[sc.secondaryGenre]}>{sc.secondaryGenre}</Badge>}
                 <Badge>{sc.tone}</Badge>
+                <Badge>{langName(sc.language)}</Badge>
               </div>
               <p className="mb-3 flex-1 text-sm italic text-[#CFC9BC]">“{sc.logline}”</p>
               <div className="mb-3">

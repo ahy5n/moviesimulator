@@ -6,6 +6,8 @@ import { formatShort, yearOf } from '@/lib/calendar';
 import { GENRE_COLORS } from '@/lib/constants';
 import { compact, money, pct } from '@/lib/format';
 import { marketShares } from '@/lib/engine/finance';
+import { seriesStageLabel } from '@/lib/engine/tv';
+import { channelById } from '@/data/channels';
 import type { Genre } from '@/lib/types';
 import { Badge, Empty, PageHeader, Panel } from '@/components/ui';
 import { stageLabel } from '@/components/cards';
@@ -17,6 +19,7 @@ export default function Rivals() {
   const r = s.rivals.find((x) => x.id === sel)!;
   const slate = s.films.filter((f) => f.studioId === r.id && f.stage !== 'library' && f.stage !== 'shelved').sort((a, b) => (a.release?.t ?? 999) - (b.release?.t ?? 999));
   const recent = s.films.filter((f) => f.studioId === r.id && f.stage === 'library').sort((a, b) => (b.release?.t ?? 0) - (a.release?.t ?? 0)).slice(0, 8);
+  const tvShows = (s.series ?? []).filter((x) => x.studioId === r.id && x.stage !== 'ended' && x.stage !== 'cancelled');
   const prefs = Object.entries(r.personality?.genres ?? {}).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)).slice(0, 5);
   return (
     <div>
@@ -53,6 +56,11 @@ export default function Rivals() {
           ) : <div className="p-4"><Empty>Nothing announced.</Empty></div>}
         </Panel>
       </div>
+      <Panel title="On television" className="mt-5" pad={false}>
+        {tvShows.length ? <table className="tbl"><thead><tr><th>Show</th><th>Format</th><th>Channel</th><th>Status</th><th className="text-right">Last season</th></tr></thead><tbody>
+          {tvShows.map((x) => <tr key={x.id}><td><Link href={`/tv/${x.id}`} className="hover:text-gold">{x.title}</Link></td><td className="text-muted">{x.format}</td><td>{channelById(x.contract?.channelId)?.name ?? '—'}</td><td className="text-muted">{seriesStageLabel(x)}{x.season ? ` · S${x.season}` : ''}</td><td className="text-right">{x.seasons.at(-1) ? `${x.seasons.at(-1)!.viewers.toFixed(2)}M` : '—'}</td></tr>)}
+        </tbody></table> : <div className="p-4"><Empty>No shows right now.</Empty></div>}
+      </Panel>
       <Panel title="Recent releases" className="mt-5" pad={false}>
         {recent.length ? <table className="tbl"><thead><tr><th>Title</th><th className="text-right">Gross</th><th className="text-right">Critics</th></tr></thead><tbody>
           {recent.map((f) => <tr key={f.id}><td><Link href={`/film/${f.id}`} className="hover:text-gold">{f.title}</Link></td><td className="text-right">{f.release?.type === 'streaming' ? 'streaming' : money(f.gross)}</td><td className="text-right">{f.critic ?? '—'}</td></tr>)}

@@ -30,6 +30,7 @@ export type Credit = { title: string; year: number; billing: number; inGame?: bo
 export type Talent = {
   id: string; tmdbId?: number; name: string; isFictional: boolean; kind: TalentKind;
   birthDate: string; gender: Gender; nationality: string; // ISO-3166 alpha-2
+  languages: string[]; // ISO 639-1 codes, home language first
   attrs: Attrs;
   genres: Record<Genre, number>;
   regional: Record<Market, number>;
@@ -67,6 +68,7 @@ export type AwardResult = { year: number; body: string; category: string; talent
 export type Film = {
   id: string; title: string; studioId: string; logline: string;
   primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone;
+  language?: string; // defaults to English for older saves
   stage: Stage; stageTurnsLeft: number; createdT: number;
   budget: number; tier: BudgetTier; suggestedBudget: number; marketing: number;
   scriptQuality: number; scriptRange?: [number, number]; quality: number; qualityKnown: boolean; testRange?: [number, number];
@@ -94,16 +96,55 @@ export type Film = {
   overrun?: number;
   prodPaid?: number;
   openByMarket?: Partial<Record<Market, number>>;
+  facility?: { saving: number; quality: number }; // locked in at greenlight from your studio lot
+  acquiredAt?: string; // festival id if bought at a festival market
+};
+
+// ---------- TV ----------
+
+export const SERIES_FORMATS = ['Drama', 'Limited', 'Sitcom', 'Procedural', 'Anthology', 'Docuseries', 'Animated', 'Soap'] as const;
+export type SeriesFormat = (typeof SERIES_FORMATS)[number];
+
+export type SeriesStage = 'development' | 'pitching' | 'preproduction' | 'filming' | 'post' | 'airing' | 'between' | 'ended' | 'cancelled';
+
+/** A channel's offer: guaranteed seasons, plus options the channel may pick up if ratings are good. */
+export type SeriesOffer = { id: string; channelId: string; guaranteed: number; options: number; feePerEp: number; expires: number; renewal?: boolean; note: string };
+
+export type SeriesContract = { channelId: string; guaranteedLeft: number; optionsLeft: number; feePerEp: number; signedT: number };
+
+export type SeasonResult = {
+  n: number; quality: number; critic: number; audience: number; viewers: number; // avg millions per episode
+  episodes: number; airedFrom: number; feePerEp: number; outcome?: 'renewed' | 'picked up' | 'cancelled' | 'ended' | 'offered renewal';
+};
+
+export type SeriesRegular = { talentId: string; role: 'lead' | 'support'; feePerEp: number };
+
+export type Series = {
+  id: string; title: string; logline: string; studioId: string;
+  format: SeriesFormat; primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone; language: string;
+  episodes: number; runtime: 30 | 45 | 60; budgetPerEp: number;
+  writerId: string; scriptQuality: number; scriptRange: [number, number];
+  stage: SeriesStage; stageTurnsLeft: number; createdT: number;
+  season: number; // seasons started (0 before the first)
+  regulars: SeriesRegular[]; leads: number; supports: number;
+  offers: SeriesOffer[]; pitchedT?: number; pitchCooldown?: number;
+  contract?: SeriesContract; ownService?: boolean;
+  seasons: SeasonResult[];
+  current?: { quality: number; viewers: number[]; aired: number; critic: number; audience: number };
+  spent: number; revenue: number; syndicated?: boolean; events: string[]; luck: number;
+  awards?: AwardResult[]; fyc?: Record<string, number>; buzz?: number;
+  lastSeasonStartT?: number; // seasons come round about once a year
 };
 
 export type Script = {
   id: string; title: string; logline: string;
-  primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone;
+  primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone; language?: string;
   quality: number; low: number; high: number; coverage: boolean;
   suggestedBudget: number; tier: BudgetTier; leads: number; supports: number;
   writerId: string; price: number; expires: number;
   source: 'market' | 'original' | 'ip' | 'sequel';
   ipId?: string; sequelOf?: string; franchiseId?: string;
+  dealBy?: string; // pitched to you by someone on a first-look or overall deal
 };
 
 export type IP = {
@@ -114,7 +155,41 @@ export type IP = {
 export type Franchise = {
   id: string; name: string; studioId: string; filmIds: string[];
   heat: number; fatigue: number; isUniverse: boolean;
+  licences?: Licence[]; merchTotal?: number;
 };
+
+export type LicenceKind = 'toys' | 'game' | 'park';
+export type Licence = { kind: LicenceKind; signedT: number; readyT: number; live: boolean; earned: number };
+
+// ---------- Festival acquisitions ----------
+
+export type Acquisition = {
+  id: string; festivalId: string; year: number; opensT: number; closesT: number;
+  title: string; logline: string; primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone; language: string;
+  budget: number; quality: number; screened: [number, number]; reception: number;
+  directorId: string; writerId: string; cast: string[];
+  reserve: number; bid: number; leader?: string; // leader is a studio id
+  rivalMax: Record<string, number>; // private valuations
+  status: 'open' | 'sold' | 'passed'; filmId?: string; log: { studioId: string; amount: number }[];
+};
+
+// ---------- Overall & first-look deals ----------
+
+export type DealKind = 'first-look' | 'overall';
+export type Deal = {
+  id: string; talentId: string; studioId: string; kind: DealKind; fromT: number; untilT: number;
+  perTurn: number; nextPitchT: number; poach?: { studioId: string; raise: number; expires: number };
+};
+
+// ---------- Studio lot ----------
+
+export type FacilityId = 'stages' | 'vfx' | 'animation' | 'post';
+export type FacilityState = { level: number; readyT: number };
+
+// ---------- Industry shocks ----------
+
+export type ShockKind = 'writers' | 'actors' | 'recession';
+export type Shock = { kind: ShockKind; announcedT: number; startT: number; endT: number };
 
 export type Negotiation = {
   talentId: string; filmId: string; role: 'lead' | 'support' | CrewRole;
@@ -170,7 +245,8 @@ export type Message = {
   offer?: { type: 'streamerBuy'; filmId: string; amount: number; buyer: string; expires: number };
 };
 
-export type Nominee = { filmId: string; talentId?: string; studioId: string; score: number };
+/** A nominee is a film, or a TV series when seriesId is set (filmId is then empty). */
+export type Nominee = { filmId: string; seriesId?: string; season?: number; talentId?: string; studioId: string; score: number };
 export type Ceremony = {
   id: string; body: string; year: number; t: number;
   categories: { name: string; nominees: Nominee[]; winner: number }[];
@@ -225,8 +301,14 @@ export type GameState = {
   gameOver?: { reason: string; t: number };
   sacked?: { t: number; offers: JobOffer[] };
   jobHistory: { studioName: string; fromT: number; toT?: number }[];
+  series?: Series[];
   /** Your reputation as a producer. Follows you to every studio. */
   producer?: { reputation: number };
+  acquisitions?: Acquisition[];
+  deals?: Deal[];
+  facilities?: Partial<Record<FacilityId, FacilityState>>;
+  shocks?: Shock[]; // newest last; past ones kept for the history
+  nextShockT?: number;
   idCounter: number;
   stats: { biddingWars: number; sacked: number };
 };

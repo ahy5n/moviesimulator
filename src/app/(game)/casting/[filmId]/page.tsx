@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { langName, speaks } from '@/lib/languages';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useGame } from '@/store/game';
@@ -21,7 +22,7 @@ function suggestions(s: GameState, f: Film, role: Role): Talent[] {
   const cap = role === 'lead' ? f.budget * 0.25 + 5e5 : role === 'support' ? f.budget * 0.06 + 3e5 : f.budget * 0.1 + 5e5;
   return allTalent(s, kind)
     .filter((t) => isAvailable(s, t.id) && t.fee <= cap && !f.cast.some((c) => c.talentId === t.id))
-    .map((t) => ({ t, score: 0.55 * genreFit(t, f.primaryGenre, f.secondaryGenre) + 0.45 * t.attrs.overall + (role === 'lead' ? t.attrs.starPower * 0.15 : 0) }))
+    .map((t) => ({ t, score: 0.55 * genreFit(t, f.primaryGenre, f.secondaryGenre) + 0.45 * t.attrs.overall + (role === 'lead' ? t.attrs.starPower * 0.15 : 0) - (speaks(t.languages, f.language) ? 0 : 40) }))
     .sort((a, b) => b.score - a.score).slice(0, 8).map((x) => x.t);
 }
 
@@ -100,6 +101,7 @@ export default function Casting() {
               {sugg.map((p) => (
                 <button key={p.id} onClick={() => { setTalentId(p.id); setRole(suggestRole); }} className={`flex w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm ${talentId === p.id ? 'border-gold bg-gold/10' : 'border-line bg-panel2 hover:border-gold/50'}`}>
                   <Avatar t={p} size={28} /><span className="min-w-0 flex-1 truncate">{p.name}</span>
+                  {!speaks(p.languages, f.language) && <span className="text-[10px] text-amber-300">no {langName(f.language)}</span>}
                   <span className="text-xs text-muted">fit {Math.round(genreFit(p, f.primaryGenre, f.secondaryGenre))}</span>
                   <OvrBadge value={p.attrs.overall} size="sm" /><span className="w-14 text-right text-xs text-gold">{money(p.fee)}</span>
                 </button>

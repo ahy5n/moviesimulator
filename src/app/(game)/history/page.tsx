@@ -13,7 +13,8 @@ export default function History() {
   const s = useGame((x) => x.state)!;
   const rec = studioRecords(s);
   const films = myFilms(s).filter((f) => f.stage === 'released' || f.stage === 'library').sort((a, b) => (b.release?.t ?? 0) - (a.release?.t ?? 0));
-  const wins = films.flatMap((f) => f.awards.filter((a) => a.won).map((a) => ({ a, f })));
+  const tvWins = (s.series ?? []).filter((x) => x.studioId === s.studio.id).flatMap((x) => (x.awards ?? []).filter((a) => a.won).map((a) => ({ a, f: { id: x.id, title: x.title, tv: true } })));
+  const wins = [...films.flatMap((f) => f.awards.filter((a) => a.won).map((a) => ({ a, f: { id: f.id, title: f.title, tv: false } }))), ...tvWins];
   const R = ({ label, f, v }: { label: string; f?: (typeof films)[number]; v?: string }) => (
     <div className="flex justify-between gap-2 py-1 text-sm"><span className="text-muted">{label}</span>{f ? <Link href={`/film/${f.id}`} className="truncate hover:text-gold">{f.title} <span className="text-gold">{v}</span></Link> : <span>—</span>}</div>
   );
@@ -35,7 +36,7 @@ export default function History() {
           <R label="Biggest flop" f={rec.worst} v={rec.worst && money(filmProfit(rec.worst))} />
         </Panel>
         <Panel title="Awards cabinet">
-          {wins.length ? <ul className="space-y-1 text-sm">{wins.map(({ a, f }, i) => { const p = a.talentId && talent(s, a.talentId); return <li key={i}>🏆 <span className="text-gold">{AWARD_BODIES.find((b) => b.id === a.body)?.short ?? a.body}</span> {a.category} — <Link className="hover:text-gold" href={`/film/${f.id}`}>{f.title}</Link>{p && a.category !== 'Best Picture' ? ` (${p.name})` : ''} <span className="text-muted">{a.year}</span></li>; })}</ul> : <Empty>The shelf is waiting.</Empty>}
+          {wins.length ? <ul className="space-y-1 text-sm">{wins.map(({ a, f }, i) => { const p = a.talentId && talent(s, a.talentId); return <li key={i}>🏆 <span className="text-gold">{AWARD_BODIES.find((b) => b.id === a.body)?.short ?? a.body}</span> {a.category} — <Link className="hover:text-gold" href={f.tv ? `/tv/${f.id}` : `/film/${f.id}`}>{f.title}</Link>{p && a.category !== 'Best Picture' ? ` (${p.name})` : ''} <span className="text-muted">{a.year}</span></li>; })}</ul> : <Empty>The shelf is waiting.</Empty>}
         </Panel>
       </div>
       <Panel title="Seasons" className="mt-5" pad={false}>

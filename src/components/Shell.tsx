@@ -7,12 +7,14 @@ import { LAST_SLOT } from '@/store/saves';
 import { formatDate, yearOf } from '@/lib/calendar';
 import { money } from '@/lib/format';
 import { acceptJob, declineJobs } from '@/lib/engine/finance';
+import { SHOCK_INFO, activeShock, upcomingShock } from '@/lib/engine/shocks';
 import { Button, CountUp, Modal, signed } from './ui';
 
 const NAV: { group: string; items: { href: string; label: string; icon: string; hard?: boolean }[] }[] = [
   { group: 'Studio', items: [
     { href: '/hq', label: 'HQ', icon: '🏛' }, { href: '/inbox', label: 'Inbox', icon: '✉' },
     { href: '/finances', label: 'Finances', icon: '$' }, { href: '/board', label: 'Board Room', icon: '⚖', hard: true },
+    { href: '/lot', label: 'Studio Lot', icon: '⌂' },
     { href: '/history', label: 'Hall of Fame', icon: '★' },
   ] },
   { group: 'Development', items: [
@@ -21,14 +23,33 @@ const NAV: { group: string; items: { href: string; label: string; icon: string; 
   ] },
   { group: 'Talent & Production', items: [
     { href: '/talent', label: 'Talent', icon: '☺' }, { href: '/slate', label: 'Production Slate', icon: '▤' },
+    { href: '/tv', label: 'TV Studio', icon: '📺' },
     { href: '/release', label: 'Release Planner', icon: '▶' },
   ] },
   { group: 'Market', items: [
     { href: '/boxoffice', label: 'Box Office', icon: '▮' }, { href: '/streaming', label: 'Streaming', icon: '◉' },
+    { href: '/festivals', label: 'Festival Market', icon: '◈' },
     { href: '/awards', label: 'Awards', icon: '🏆' }, { href: '/rivals', label: 'Rivals', icon: '⚔' },
   ] },
   { group: '', items: [{ href: '/settings', label: 'Saves & Settings', icon: '⚙' }, { href: '/about', label: 'About', icon: 'ℹ' }] },
 ];
+
+/** Strikes and recessions affect everything, so they get a banner on every page. */
+function ShockBanner() {
+  const s = useGame((x) => x.state);
+  if (!s) return null;
+  const now = activeShock(s);
+  const soon = upcomingShock(s);
+  const x = now ?? soon;
+  if (!x) return null;
+  const info = SHOCK_INFO[x.kind];
+  return (
+    <div className={`border-b px-4 py-2 text-center text-sm ${now ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-amber-500/40 bg-amber-500/10 text-amber-200'}`}>
+      <span className="font-semibold">{now ? `${info.name} in force` : `${info.name} from ${formatDate(x.startT)}`}</span>
+      <span className="text-xs opacity-80"> · {info.effects.slice(0, 2).join(' · ')}{now ? ` · until about ${formatDate(x.endT)}` : ''}</span>
+    </div>
+  );
+}
 
 export function Loading({ progress }: { progress: number }) {
   return (
@@ -184,6 +205,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Button variant="ticket" onClick={advance} disabled={busy || blocked}>{busy ? 'Rolling…' : 'Advance ▸'}</Button>
       </header>
 
+      <ShockBanner />
       <main className="mx-auto max-w-7xl px-4 pb-24 pt-5 sm:px-6"><Suspense>{children}</Suspense></main>
       <footer className="mx-auto max-w-7xl px-4 pb-24 text-[11px] text-muted sm:px-6 lg:pb-8">
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">

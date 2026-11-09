@@ -2,6 +2,8 @@
 
 Run a Hollywood studio from January 2026. Buy scripts, cast real actors, greenlight films, fight rival studios for talent, release in cinemas and on streaming, chase awards, and try not to get fired. Sister game to T20 Franchise Sim.
 
+Also: TV series sold to channels on multi-season contracts, film and TV awards, languages, talent and board loyalty, a festival acquisitions market, overall and first-look deals, studio facilities, franchise merchandise and licensing, and industry shocks (writers' and actors' strikes, recessions).
+
 Next.js (App Router) + TypeScript + Tailwind + Zustand + Recharts. Everything runs client-side; saves live in IndexedDB (localStorage fallback), five slots, autosave every turn. Seeded RNG (`seedrandom`): the same seed and the same choices give the same results.
 
 ## Quick start
@@ -43,12 +45,13 @@ Push to GitHub, import into Vercel, deploy. No environment variables are needed 
 
 | Path | What |
 |---|---|
-| `src/lib/engine/` | Simulation: `turn.ts` (fortnight loop), `production.ts`, `boxoffice.ts`, `negotiation.ts`, `rivals.ts`, `streaming.ts`, `awards.ts`, `finance.ts` (loans, board, sacking), `careers.ts`, `scripts.ts` (marketplace, IP, sequels, universes) |
+| `src/lib/engine/` | Simulation: `turn.ts` (fortnight loop), `production.ts`, `boxoffice.ts`, `negotiation.ts`, `rivals.ts`, `streaming.ts`, `awards.ts`, `finance.ts` (loans, board, sacking), `careers.ts`, `scripts.ts` (marketplace, IP, sequels, universes), `tv.ts` / `tvRivals.ts` (series), `loyalty.ts`, `acquisitions.ts` (festival market), `deals.ts` (overall and first-look deals), `facilities.ts` (studio lot), `merch.ts` (merchandise and licensing), `shocks.ts` (strikes and recessions) |
 | `src/lib/ratings.ts` | Rating formulas from career data (shared by the TMDB builder and the generator) |
 | `src/lib/talentDb.ts` | Read-only DB + per-save `talentOverrides` (ageing, growth, fame) |
 | `src/data/studios.ts` | **All real studio names**, plain text only. Rename here. |
 | `src/data/awards.ts` | Fictional awards and festivals |
-| `src/app/(game)/` | The 21 screens |
+| `src/data/channels.ts` | Fictional TV channels plus streamers linked to rival studios |
+| `src/app/(game)/` | The game screens |
 | `scripts/` | TMDB builder, demo roster generator, headless simulator |
 
 ## Non-negotiables (enforced in code)

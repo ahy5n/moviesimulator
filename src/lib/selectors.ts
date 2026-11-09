@@ -1,5 +1,6 @@
 // Read-only views over game state used by the screens.
 import { yearOf } from './calendar';
+import { talent } from './talentDb';
 import { makeRng, clamp } from './rng';
 import { GENRES, type Film, type GameState, type Genre } from './types';
 import { filmProfit, studioById } from './engine/util';
@@ -45,6 +46,13 @@ export function alerts(s: GameState): Alert[] {
   for (const m of s.inbox) if (m.offer && m.offer.expires > s.t && !m.read) out.push({ text: m.title, href: m.link ?? '/inbox', tone: 'gold' });
   if (s.board && s.board.confidence < 35) out.push({ text: `Board confidence is ${Math.round(s.board.confidence)}. Below 20 you're out.`, href: '/board', tone: 'red' });
   if (s.studio.cash < 0) out.push({ text: 'You are overdrawn!', href: '/finances', tone: 'red' });
+  for (const x of s.series ?? []) {
+    if (x.studioId !== s.studio.id) continue;
+    if (x.stage === 'pitching' && x.pitchedT === undefined && !x.offers.length) out.push({ text: `${x.title}: pitch it to channels${s.studio.streaming ? ' or keep it for your service' : ''}.`, href: `/tv/${x.id}`, tone: 'gold' });
+    if (x.offers.length) out.push({ text: `${x.title}: ${x.offers.length} channel offer${x.offers.length > 1 ? 's' : ''} waiting.`, href: `/tv/${x.id}`, tone: 'gold' });
+    if (x.stage === 'preproduction') out.push({ text: `${x.title}: cast it and start season ${x.season + 1}.`, href: `/tv/${x.id}`, tone: 'gold' });
+    if (x.stage === 'between' && x.ownService) out.push({ text: `${x.title}: order another season or end it.`, href: `/tv/${x.id}`, tone: 'gold' });
+  }
   const unviewed = s.ceremonies.filter((c) => !c.viewed && c.categories.some((k) => k.winner >= 0));
   for (const c of unviewed) out.push({ text: 'An awards ceremony is ready to watch.', href: `/awards/ceremony/${c.id}`, tone: 'gold' });
   return out;
@@ -61,4 +69,27 @@ export function studioRecords(s: GameState) {
     biggestOpening: by((f) => f.weekly[0] ?? 0),
     worst: [...mine].sort((a, b) => filmProfit(a) - filmProfit(b))[0],
   };
+}
+
+const PERSON_CATEGORIES = new Set(['Best Director', 'Best Actor', 'Best Actress', 'Best Supporting Actor', 'Best Supporting Actress', 'Best Score', 'Best Cinematography', 'Best Editing']);
+/** Display info for an awards nominee, film or TV. */
+export function nomineeInfo(s: GameState, n: { filmId: string; seriesId?: string; season?: number; talentId?: string }, category: string) {
+  const series = n.seriesId ? (s.series ?? []).find((x) => x.id === n.seriesId) : undefined;
+  const film = series ? undefined : s.films.find((x) => x.id === n.filmId);
+  const title = series ? `${series.title}${n.season && n.season > 1 ? ` (S${n.season})` : ''}` : film?.title ?? '?';
+  const href = series ? `/tv/${series.id}` : film ? `/film/${film.id}` : undefined;
+  const isPerson = !!n.talentId && (PERSON_CATEGORIES.has(category) || /Actor|Actress/.test(category));
+  const person = isPerson ? talent(s, n.talentId!)?.name : undefined;
+  return { title, href, person, isTv: !!series };
+}
+
+/** TV ratings chart: every show on air right now, by its latest episode. */
+export function tvChart(s: GameState) {
+  return (s.series ?? []).filter((x) => x.stage === 'airing' && x.current && x.current.viewers.length)
+    .map((x) => {
+      const v = x.current!.viewers;
+      const st = studioById(s, x.studioId);
+      return { x, latest: v[v.length - 1], avg: v.reduce((a, b) => a + b, 0) / v.length, studio: st?.name ?? '?', color: st?.color ?? '#888', mine: x.studioId === s.studio.id };
+    })
+    .sort((a, b) => b.latest - a.latest);
 }

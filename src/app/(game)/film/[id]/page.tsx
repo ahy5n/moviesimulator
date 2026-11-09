@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { langName } from '@/lib/languages';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { Bar as RBar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -50,7 +51,7 @@ export default function FilmPage() {
             <p className="mt-2 max-w-2xl text-sm italic text-[#CFC9BC]">“{f.logline}”</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Badge color={GENRE_COLORS[f.primaryGenre]}>{f.primaryGenre}</Badge>{f.secondaryGenre && <Badge color={GENRE_COLORS[f.secondaryGenre]}>{f.secondaryGenre}</Badge>}
-              <Badge>{f.tone}</Badge><Badge>{f.tier}</Badge><Badge>{stageLabel(f)}</Badge>
+              <Badge>{f.tone}</Badge><Badge>{langName(f.language)}</Badge><Badge>{f.tier}</Badge><Badge>{stageLabel(f)}</Badge>
               {f.franchiseId && <Badge color="#D4AF37">{s.franchises.find((x) => x.id === f.franchiseId)?.name}</Badge>}
               {f.chinaBlocked && <Badge color="#F87171">No China release</Badge>}
               {f.soldTo && <Badge>Sold to {studioById(s, f.soldTo)?.name}</Badge>}
@@ -109,7 +110,7 @@ export default function FilmPage() {
           )}
           {(f.stage === 'post' || f.stage === 'ready') && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {!f.testRange && <Button variant="ghost" onClick={() => act((d) => testScreening(d, filmById(d, f.id)!))}>Test screening ({money(testScreeningCost(f))})</Button>}
+              {!f.testRange && <Button variant="ghost" onClick={() => act((d) => testScreening(d, filmById(d, f.id)!))}>Test screening ({money(testScreeningCost(f, s))})</Button>}
               {f.testRange && <span className="chip">Test screening: {f.testRange[0]}–{f.testRange[1]}</span>}
               {f.testRange && !f.events.some((e) => e.startsWith('Reshoots')) && <Button variant="ghost" onClick={() => act((d) => reshoots(d, filmById(d, f.id)!))}>Order reshoots ({money(reshootCost(f))})</Button>}
               {f.stage === 'ready' && <LinkButton href={`/release?film=${f.id}`} variant="gold">{f.release ? `Releases ${formatShort(f.release.t)}` : 'Plan release'}</LinkButton>}
@@ -182,7 +183,8 @@ export default function FilmPage() {
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <Panel title="Awards">
           {f.awards.length ? <ul className="space-y-1 text-sm">{f.awards.map((a, i) => { const t = a.talentId && talent(s, a.talentId); return <li key={i}>{a.won ? '🏆' : '•'} {AWARD_BODIES.find((b) => b.id === a.body)?.short ?? FESTIVALS.find((x) => x.id === a.body)?.name} — {a.category}{t ? ` (${t.name})` : ''} <span className="text-muted">{a.won ? 'won' : 'nominated'}</span></li>; })}</ul> : <Empty>No awards yet.</Empty>}
-          {f.festival && <div className="mt-2 text-sm text-muted">Premiered at {FESTIVALS.find((x) => x.id === f.festival!.id)?.name}: reception {f.festival.reception > 0 ? '+' : ''}{f.festival.reception}</div>}
+          {f.festival && <div className="mt-2 text-sm text-muted">{f.acquiredAt ? 'Bought at' : 'Premiered at'} {FESTIVALS.find((x) => x.id === f.festival!.id)?.name}: reception {f.festival.reception > 0 ? '+' : ''}{f.festival.reception}</div>}
+          {!!f.facility && (f.facility.saving > 0 || f.facility.quality > 0) && <div className="mt-1 text-sm text-muted">Shot on your lot: −{Math.round(f.facility.saving * 100)}% production cost, +{f.facility.quality} quality</div>}
         </Panel>
         <Panel title="Production log">
           {f.events.length ? <ul className="space-y-1 text-sm">{f.events.map((e, i) => <li key={i}>• {e}</li>)}</ul> : <Empty>Quiet so far.</Empty>}

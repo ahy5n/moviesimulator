@@ -10,6 +10,7 @@ import { buyIP, commissionScript, createUniverse, linkToUniverse, sequelEligible
 import { filmProfit, isReleased } from '@/lib/engine/util';
 import type { BudgetTier, Genre, GameState } from '@/lib/types';
 import { Badge, Bar, Button, Empty, Field, Modal, PageHeader, Panel } from '@/components/ui';
+import { MerchBlock } from '@/components/MerchBlock';
 
 type Dev = { kind: 'ip'; id: string; g: Genre; g2?: Genre; title: string } | { kind: 'sequel'; id: string; g: Genre; g2?: Genre; title: string };
 
@@ -33,6 +34,7 @@ export default function IPPage() {
   const franchises = s.franchises.filter((f) => f.studioId === s.studio.id);
   const sequels = s.films.filter((f) => sequelEligible(s, f));
   const linkable = s.films.filter((f) => f.studioId === s.studio.id && f.stage !== 'shelved');
+  const hits = s.films.filter((f) => f.studioId === s.studio.id && !f.franchiseId && isReleased(f) && f.gross >= 60e6).sort((a, b) => b.gross - a.gross).slice(0, 8);
 
   const start = () => {
     if (!dev) return;
@@ -108,12 +110,28 @@ export default function IPPage() {
                     {linkable.filter((f) => !fr.filmIds.includes(f.id)).map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
                   </select>
                 )}
+                <MerchBlock fr={fr} />
               </div>
             ))}
           </div>
         )}
-        <p className="mt-3 text-xs text-muted">A hit raises the heat of every film in its universe. Release too many too quickly and fatigue sets in.</p>
+        <p className="mt-3 text-xs text-muted">A hit raises the heat of every film in its universe. Release too many too quickly and fatigue sets in. Franchises earn merch royalties between films; licensing deals multiply that. Superhero, animated, family and fantasy brands sell the most.</p>
       </Panel>
+
+      {hits.length > 0 && (
+        <Panel title="Standalone hits: license the brand" className="mt-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {hits.map((f) => (
+              <div key={f.id} className="rounded-lg border border-line bg-panel2 p-3">
+                <Link href={`/film/${f.id}`} className="font-medium hover:text-gold">{f.title}</Link>
+                <div className="text-xs text-muted">{f.primaryGenre} · {money(f.gross)} worldwide</div>
+                <MerchBlock filmId={f.id} gross={f.gross} />
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted">Signing a licence turns the film into a franchise.</p>
+        </Panel>
+      )}
 
       <Modal open={!!dev} onClose={() => setDev(null)} title={dev ? `Develop ${dev.title}` : ''}>
         {dev && (

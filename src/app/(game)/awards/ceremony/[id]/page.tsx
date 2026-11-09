@@ -4,11 +4,10 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useGame } from '@/store/game';
 import { AWARD_BODIES } from '@/data/awards';
-import { talent } from '@/lib/talentDb';
 import { studioById } from '@/lib/engine/util';
+import { nomineeInfo } from '@/lib/selectors';
 import { Button, Empty } from '@/components/ui';
 
-const PERSON_CATS = new Set(['Best Director', 'Best Actor', 'Best Actress', 'Best Supporting Actor', 'Best Supporting Actress', 'Best Score', 'Best Cinematography', 'Best Editing']);
 
 export default function Ceremony() {
   const { state: s, act } = useGame();
@@ -21,13 +20,13 @@ export default function Ceremony() {
   if (c.categories.every((k) => k.winner < 0)) return <Empty>The envelopes are still sealed. Come back on {c.t > s.t ? 'ceremony night' : 'the night'}.</Empty>;
   const body = AWARD_BODIES.find((b) => b.id === c.body)!;
   const done = idx >= c.categories.length;
-  // Best Picture last, for drama.
-  const cats = [...c.categories].sort((a, b) => (a.name === 'Best Picture' ? 1 : b.name === 'Best Picture' ? -1 : 0));
+  // Top prizes last, for drama.
+  const topRank = (n: string) => (n === 'Best Picture' ? 3 : n === 'Best Drama Series' || n === 'Best TV Drama' ? 2 : /Series$|^Best TV/.test(n) ? 1 : 0);
+  const cats = [...c.categories].sort((a, b) => topRank(a.name) - topRank(b.name));
   const cat = cats[Math.min(idx, cats.length - 1)];
-  const label = (n: (typeof cat.nominees)[number]) => {
-    const f = s.films.find((x) => x.id === n.filmId);
-    const p = n.talentId && PERSON_CATS.has(cat.name) ? talent(s, n.talentId) : undefined;
-    return { main: p ? p.name : f?.title ?? '?', sub: p ? f?.title : studioById(s, n.studioId)?.name, mine: n.studioId === s.studio.id };
+  const label = (n: (typeof cat.nominees)[number], category = cat.name) => {
+    const info = nomineeInfo(s, n, category);
+    return { main: info.person ?? info.title, sub: info.person ? info.title : studioById(s, n.studioId)?.name, mine: n.studioId === s.studio.id };
   };
 
   return (
@@ -58,7 +57,7 @@ export default function Ceremony() {
           </>
         ) : (
           <div className="mt-4 space-y-1 text-left text-sm">
-            {cats.map((k) => { const l = label(k.nominees[k.winner]); return <div key={k.name} className="flex justify-between gap-3 border-b border-white/10 py-1.5"><span className="text-white/70">{k.name}</span><span className={l.mine ? 'font-semibold text-gold-light' : ''}>{l.main}</span></div>; })}
+            {cats.map((k) => { const l = label(k.nominees[k.winner], k.name); return <div key={k.name} className="flex justify-between gap-3 border-b border-white/10 py-1.5"><span className="text-white/70">{k.name}</span><span className={l.mine ? 'font-semibold text-gold-light' : ''}>{l.main}</span></div>; })}
           </div>
         )}
       </div>

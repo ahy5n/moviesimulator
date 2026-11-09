@@ -2,12 +2,14 @@
 import { monthOf, yearOf } from '../calendar';
 import { GENRE_BIAS, HQS, MARKET_SHARE, MONTH_HEAT, RENTAL, SCREENS, tierInfo } from '../constants';
 import { OUTLETS, CRITICS } from '../names';
+import { languageMarketFactor } from '../languages';
 import { makeRng, clamp } from '../rng';
 import { reviewQuote } from '../titles';
 import { MARKETS, type Film, type GameState, type Market, type ReleaseType, type ScreenPlan, type Studio } from '../types';
 import { castMembers } from './production';
 import { addLoyalty, LOYALTY } from './loyalty';
 import { franchiseMult, franchiseOf } from './scripts';
+import { boxOfficeShockMult } from './shocks';
 import { filmProfit, headline, msg, pay, spend, studioById } from './util';
 
 /** How big a given genre can get at the global box office. */
@@ -68,9 +70,9 @@ export function expectedOpening(s: GameState, f: Film, plan: { t: number; screen
     * competition(s, f, plan.t) * (0.68 + q / 100 * 0.62) * franchiseMult(s, f)
     * (1 + (f.festival?.reception ?? 0) * 0.15) * (1 + f.buzz * 0.1);
   const g = 0.65 * GENRE_CEILING[f.primaryGenre] + 0.35 * GENRE_CEILING[f.secondaryGenre ?? f.primaryGenre];
-  const common = ti.base * g * Math.pow(boosts, 0.75) * Math.pow(SCREENS[plan.screens].mult, ti.screenW) * (plan.type === 'dayanddate' ? 0.6 : 1);
+  const common = ti.base * g * Math.pow(boosts, 0.75) * boxOfficeShockMult(s) * Math.pow(SCREENS[plan.screens].mult, ti.screenW) * (plan.type === 'dayanddate' ? 0.6 : 1);
   const out = {} as Record<Market, number>;
-  for (const m of MARKETS) out[m] = common * MARKET_SHARE[m] * regionalAppeal(s, f, m) * studioRegion(st, m);
+  for (const m of MARKETS) out[m] = common * MARKET_SHARE[m] * regionalAppeal(s, f, m) * studioRegion(st, m) * languageMarketFactor(f.language, m);
   return out;
 }
 

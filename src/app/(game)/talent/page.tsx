@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { LANGUAGE_CODES, langName } from '@/lib/languages';
 import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useGame } from '@/store/game';
@@ -22,6 +23,7 @@ export default function TalentDB() {
   const [q, setQ] = useState('');
   const [nat, setNat] = useState('');
   const [gender, setGender] = useState('');
+  const [lang, setLang] = useState('');
   const [genre, setGenre] = useState<Genre | ''>('');
   const [minOvr, setMinOvr] = useState(0);
   const [maxFee, setMaxFee] = useState(0);
@@ -42,6 +44,7 @@ export default function TalentDB() {
       if (ql && !t.name.toLowerCase().includes(ql)) return false;
       if (nat && t.nationality !== nat) return false;
       if (gender && t.gender !== gender) return false;
+      if (lang && !(t.languages ?? []).includes(lang)) return false;
       if (minOvr && t.attrs.overall < minOvr) return false;
       if (maxFee && t.fee > maxFee) return false;
       const age = ageAt(t.birthDate, s.t);
@@ -61,7 +64,7 @@ export default function TalentDB() {
       }
     };
     return list.sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
-  }, [all, q, nat, gender, minOvr, maxFee, ageMin, ageMax, newcomers, avail, sort, dir, genre, s]);
+  }, [all, q, nat, gender, lang, minOvr, maxFee, ageMin, ageMax, newcomers, avail, sort, dir, genre, s]);
 
   const shown = rows.slice(page * PAGE, page * PAGE + PAGE);
   const th = (k: SortKey, label: string, right = false) => (
@@ -83,6 +86,7 @@ export default function TalentDB() {
         <input className="input col-span-2" placeholder="Search name…" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
         <select className="select" value={nat} onChange={(e) => { setNat(e.target.value); setPage(0); }}><option value="">All nationalities</option>{nats.map((n) => <option key={n} value={n}>{flag(n)} {countryName(n)}</option>)}</select>
         <select className="select" value={gender} onChange={(e) => { setGender(e.target.value); setPage(0); }}><option value="">Any gender</option><option value="F">Female</option><option value="M">Male</option><option value="X">Non-binary</option></select>
+        <select className="select" value={lang} onChange={(e) => { setLang(e.target.value); setPage(0); }}><option value="">Any language</option>{LANGUAGE_CODES.map((l) => <option key={l} value={l}>Speaks {langName(l)}</option>)}</select>
         <select className="select" value={genre} onChange={(e) => { setGenre(e.target.value as Genre | ''); if (e.target.value) setSort('genre'); setPage(0); }}><option value="">Genre rating…</option>{GENRES.map((g) => <option key={g}>{g}</option>)}</select>
         <select className="select" value={minOvr} onChange={(e) => { setMinOvr(Number(e.target.value)); setPage(0); }}><option value={0}>Any overall</option>{[50, 60, 70, 80].map((v) => <option key={v} value={v}>{v}+ overall</option>)}</select>
         <select className="select" value={maxFee} onChange={(e) => { setMaxFee(Number(e.target.value)); setPage(0); }}><option value={0}>Any fee</option>{[250e3, 1e6, 3e6, 10e6].map((v) => <option key={v} value={v}>≤ {money(v)}</option>)}</select>

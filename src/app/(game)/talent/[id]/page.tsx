@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { langName } from '@/lib/languages';
 import { useParams } from 'next/navigation';
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from 'recharts';
 import { useGame } from '@/store/game';
@@ -12,6 +13,7 @@ import { loyaltyDiscount, loyaltyLabel, loyaltyTo, PICKY_BYPASS_AT, SKIP_WAR_AT 
 import { GENRES, MARKETS } from '@/lib/types';
 import { Badge, Bar, Empty, Panel } from '@/components/ui';
 import { Avatar, OvrBadge } from '@/components/cards';
+import { DealPanel } from '@/components/DealPanel';
 
 export default function TalentProfile() {
   const s = useGame((x) => x.state)!;
@@ -37,6 +39,7 @@ export default function TalentProfile() {
         <div className="min-w-0 flex-1">
           <h1 className="h-display text-3xl font-bold">{t.name}</h1>
           <div className="mt-1 text-sm text-muted">{flag(t.nationality)} {countryName(t.nationality)} · Age {ageAt(t.birthDate, s.t)} · <span className="capitalize">{t.kind === 'actor' ? (t.gender === 'F' ? 'actress' : 'actor') : t.kind}</span>{t.isFictional ? ' · fictional' : ''}{ov?.retired ? ' · retired' : ''}</div>
+          <div className="mt-1 text-sm">Speaks {(t.languages ?? []).map(langName).join(', ') || '—'}</div>
           <div className="mt-2 flex flex-wrap gap-1.5">{t.traits.map((tr) => <span key={tr} className="chip" title={TRAIT_INFO[tr]}>{tr}</span>)}</div>
         </div>
         <div className="text-right">
@@ -73,7 +76,7 @@ export default function TalentProfile() {
           {free ? <div className="text-emerald-400">Available now.</div> : (
             <div className="text-sm">
               <div className="text-amber-300">Busy until {formatShort(until)}</div>
-              {commit && <div className="mt-1 text-muted">{commit.filmId ? <>On <Link className="link" href={`/film/${commit.filmId}`}>{s.films.find((f) => f.id === commit.filmId)?.title ?? 'a project'}</Link></> : 'Committed'} for {studioById(s, commit.studioId)?.name ?? 'a studio'}.</div>}
+              {commit && <div className="mt-1 text-muted">{commit.filmId ? <>On <Link className="link" href={commit.filmId.startsWith('tv') ? `/tv/${commit.filmId}` : `/film/${commit.filmId}`}>{s.films.find((f) => f.id === commit.filmId)?.title ?? (s.series ?? []).find((x) => x.id === commit.filmId)?.title ?? 'a project'}</Link></> : 'Committed'} for {studioById(s, commit.studioId)?.name ?? 'a studio'}.</div>}
             </div>
           )}
           <div className="mt-3 flex h-4 overflow-hidden rounded bg-panel2" title="Next 12 fortnights">
@@ -97,6 +100,7 @@ export default function TalentProfile() {
               </div>
             );
           })()}
+          <DealPanel t={t} />
         </Panel>
         <Panel title="Filmography" className="lg:col-span-2">
           {inGame.length > 0 && (

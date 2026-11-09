@@ -4,8 +4,8 @@ import { useGame } from '@/store/game';
 import { AWARD_BODIES, FESTIVALS, categoriesFor } from '@/data/awards';
 import { formatShort, turnInYear, yearOf } from '@/lib/calendar';
 import { money } from '@/lib/format';
-import { talent } from '@/lib/talentDb';
-import { fycSpend } from '@/lib/engine/awards';
+import { fycSpend, fycSpendSeries } from '@/lib/engine/awards';
+import { nomineeInfo } from '@/lib/selectors';
 import { studioById } from '@/lib/engine/util';
 import type { Film, GameState } from '@/lib/types';
 import { Button, Empty, PageHeader, Panel } from '@/components/ui';
@@ -32,6 +32,8 @@ export default function Awards() {
   const live = s.ceremonies.filter((c) => c.categories.every((k) => k.winner < 0));
   const past = s.ceremonies.filter((c) => c.categories.some((k) => k.winner >= 0)).slice().reverse();
   const films = campaignFilms(s);
+  // TV seasons that aired in the last year (or are on air now) can campaign.
+  const tvShows = (s.series ?? []).filter((x) => x.studioId === s.studio.id && (x.stage === 'airing' || (x.seasons.at(-1)?.airedFrom ?? -99) >= s.t - 26));
   const cats = categoriesFor('academy', s.settings.crewMode === 'full');
 
   return (
@@ -43,7 +45,7 @@ export default function Awards() {
           {!events.length && <Empty>Season over. Next one starts in the new year.</Empty>}
         </Panel>
         <Panel title="For Your Consideration" className="lg:col-span-2">
-          {!films.length ? <Empty>No eligible films. Release well-reviewed films this year to campaign.</Empty> : (
+          {!films.length && !tvShows.length ? <Empty>Nothing eligible yet. Release well-reviewed films or air a TV season to campaign.</Empty> : !films.length ? null : (
             <div className="space-y-4">
               {films.map((f) => (
                 <div key={f.id} className="rounded-lg border border-line bg-panel2 p-3">
@@ -61,6 +63,18 @@ export default function Awards() {
               <p className="text-xs text-muted">Diminishing returns: the first million matters far more than the tenth.</p>
             </div>
           )}
+          {tvShows.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="label">Television</div>
+              {tvShows.map((x) => (
+                <div key={x.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-panel2 p-3 text-sm">
+                  <span><Link href={`/tv/${x.id}`} className="font-semibold hover:text-gold">{x.title}</Link> <span className="text-xs text-muted">S{x.seasons.at(-1)?.n ?? x.season} · critics {x.seasons.at(-1)?.critic ?? x.current?.critic ?? '—'} · campaign {money(x.fyc?.['Series campaign'] ?? 0)}</span></span>
+                  <span className="flex gap-1">{AMOUNTS.map((a) => <Button key={a} size="sm" variant="ghost" disabled={s.studio.cash < a} onClick={() => act((d) => fycSpendSeries(d, x.id, 'Series campaign', a))}>+{money(a, 0)}</Button>)}</span>
+                </div>
+              ))}
+              <p className="text-xs text-muted">A series campaign helps in every TV category at the Golden Lens and the Crystal Television Awards.</p>
+            </div>
+          )}
         </Panel>
       </div>
 
@@ -71,10 +85,10 @@ export default function Awards() {
               <div key={k.name}>
                 <div className="label mb-1">{k.name}</div>
                 <ul className="space-y-0.5 text-sm">{k.nominees.map((n, i) => {
-                  const f = s.films.find((x) => x.id === n.filmId);
-                  const p = n.talentId && !['Best Picture', 'Best Screenplay', 'Best Animated Feature', 'Best International Feature', 'Best Ensemble'].includes(k.name) ? talent(s, n.talentId) : undefined;
+                  const info = nomineeInfo(s, n, k.name);
                   const mine = n.studioId === s.studio.id;
-                  return <li key={i} className={mine ? 'text-gold' : ''}>{p ? `${p.name} — ` : ''}<span className={p ? 'text-muted' : ''}>{f?.title}</span>{mine && f && <Button size="sm" variant="subtle" onClick={() => act((d) => fycSpend(d, f.id, k.name, 1_000_000))}>+$1M</Button>}</li>;
+                  const boost = () => act((d) => (n.seriesId ? fycSpendSeries(d, n.seriesId, k.name, 1_000_000) : fycSpend(d, n.filmId, k.name, 1_000_000)));
+                  return <li key={i} className={mine ? 'text-gold' : ''}>{info.person ? `${info.person} — ` : ''}<span className={info.person ? 'text-muted' : ''}>{info.title}</span>{info.isTv && <span className="ml-1 text-[10px] text-muted">TV</span>}{mine && <Button size="sm" variant="subtle" onClick={boost}>+$1M</Button>}</li>;
                 })}</ul>
               </div>
             ))}
@@ -86,9 +100,9 @@ export default function Awards() {
         {!past.length ? <Empty>No ceremonies yet — the first is in January {y + (turnInYear(s.t) > 1 ? 1 : 0)}.</Empty> : (
           <ul className="divide-y divide-line text-sm">
             {past.map((c) => {
-              const bp = c.categories.find((k) => k.name === 'Best Picture' || k.name === 'Best Ensemble');
+              const bp = c.categories.find((k) => ['Best Picture', 'Best Ensemble', 'Best Drama Series'].includes(k.name)) ?? c.categories[0];
               const w = bp && bp.nominees[bp.winner];
-              const f = w && s.films.find((x) => x.id === w.filmId);
+              const f = w ? { title: nomineeInfo(s, w, bp.name).title } : undefined;
               return (
                 <li key={c.id} className="flex items-center justify-between gap-2 py-2">
                   <span>{AWARD_BODIES.find((b) => b.id === c.body)?.name} {c.year} {!c.viewed && <span className="chip text-gold">unwatched</span>}</span>

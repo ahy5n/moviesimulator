@@ -5,6 +5,7 @@ import { HQS, START_CASH } from '../constants';
 import { makeRng, clamp } from '../rng';
 import type { Board, BoardTarget, GameState, JobOffer, Studio } from '../types';
 import { allStudios, filmProfit, msg, nextId, pay, headline } from './util';
+import { activeShock, recession } from './shocks';
 
 const ACTIVE = new Set(['development', 'preproduction', 'filming', 'post', 'ready']);
 
@@ -24,7 +25,7 @@ export const debt = (s: GameState) => s.loans.reduce((a, l) => a + l.balance, 0)
 
 export function loanRate(s: GameState): number {
   const ratio = debt(s) / Math.max(1, maxDebt(s));
-  return 0.06 + ratio * 0.06 + (s.studio.cash < 0 ? 0.04 : 0);
+  return 0.06 + ratio * 0.06 + (s.studio.cash < 0 ? 0.04 : 0) + (recession(s) ? 0.02 : 0);
 }
 
 export function takeLoan(s: GameState, amount: number, turns: number): string | null {
@@ -130,11 +131,12 @@ export function boardYearEnd(s: GameState) {
     t.met = evaluateTarget(s, t, year);
     if (t.met) met++;
   }
-  const delta = met * 9 - (b.targets.length - met) * 11 * boardSoftening(s);
+  const shocked = (s.shocks ?? []).some((x) => x.startT < s.t && x.endT > s.t - 26) || !!activeShock(s);
+  const delta = met * 9 - (b.targets.length - met) * 11 * boardSoftening(s) * (shocked ? 0.75 : 1);
   b.confidence = clamp(b.confidence + delta);
   addBoardLoyalty(s, met * BOARD_LOYALTY.target);
   b.history.push({ year, confidence: b.confidence, met, total: b.targets.length });
-  msg(s, 'board', `Board review ${year}: ${met}/${b.targets.length} targets met`, `Confidence ${delta >= 0 ? 'rises' : 'falls'} to ${Math.round(b.confidence)}.`, { link: '/board' });
+  msg(s, 'board', `Board review ${year}: ${met}/${b.targets.length} targets met`, `Confidence ${delta >= 0 ? 'rises' : 'falls'} to ${Math.round(b.confidence)}.${shocked && met < b.targets.length ? ' Given the year the industry had, the board is cutting you some slack.' : ''}`, { link: '/board' });
 }
 
 export function boardReact(s: GameState, delta: number, why: string) {
@@ -201,6 +203,7 @@ export function acceptJob(s: GameState, offerId: string) {
   for (const c of Object.values(s.commitments)) if (c.studioId === 'player') c.studioId = old.id;
   for (const c of s.ceremonies) for (const k of c.categories) for (const n of k.nominees) if (n.studioId === 'player') n.studioId = old.id;
   for (const ip of s.ips) if (ip.owner === 'player') ip.owner = old.id;
+  for (const x of s.series ?? []) if (x.studioId === 'player') x.studioId = old.id; // your old shows stay with the old studio
   for (const [id, ov] of Object.entries(s.talentOverrides)) if (ov.loyalty?.player) {
     const { player, ...rest } = ov.loyalty;
     s.talentOverrides[id] = { ...ov, loyalty: { ...rest, [old.id]: (rest[old.id] ?? 0) + player } };

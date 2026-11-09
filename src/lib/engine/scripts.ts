@@ -2,10 +2,13 @@
 import { yearOf } from '../calendar';
 import { TIERS, tierInfo } from '../constants';
 import { makeRng, clamp, type RNG } from '../rng';
+import { HQ_LANG, pickLanguage, speaks } from '../languages';
 import { allTalent, talent } from '../talentDb';
 import { genIPTitle, genLogline, genTitle } from '../titles';
 import { GENRES, type BudgetTier, type Film, type Franchise, type GameState, type Genre, type IP, type Script, type Tone } from '../types';
 import { filmById, msg, nextId, pay, filmProfit } from './util';
+import { dealBlock, dealFeeMult } from './deals';
+import { writersStrike } from './shocks';
 
 const COMBOS: [Genre, Genre][] = [
   ['Action', 'Comedy'], ['Sci-Fi', 'Horror'], ['Romance', 'Comedy'], ['Crime', 'Thriller'], ['Action', 'Sci-Fi'],
@@ -47,7 +50,11 @@ export function genScript(s: GameState, r: RNG, source: Script['source'] = 'mark
   if (r.chance(0.45)) [g, g2] = r.pick(COMBOS);
   else { g = r.weighted(GENRES, (x) => s.genreHeat[x] * (x === 'Documentary' || x === 'Western' || x === 'Musical' ? 0.4 : 1)); }
   const tone: Tone = r.pick(['light', 'balanced', 'dark'] as const);
-  const tier = pickTier(r, g);
+  const language = pickLanguage(r, HQ_LANG[s.studio.hq]);
+  let tier = pickTier(r, g);
+  // Non-English projects rarely get Hollywood-sized budgets.
+  if (language !== 'en' && (tier === 'Tentpole' || tier === 'High') && r.chance(0.75)) tier = 'Mid';
+  if (language !== 'en' && tier === 'Mid' && r.chance(0.35)) tier = 'Low';
   const suggestedBudget = budgetFor(r, tier);
   const quality = clamp(Math.round(r.normal(58, 14)), 15, 97);
   const spread = r.int(14, 22);
@@ -56,7 +63,7 @@ export function genScript(s: GameState, r: RNG, source: Script['source'] = 'mark
   const supports = g === 'Documentary' ? 0 : r.int(1, 3);
   return {
     id: nextId(s, 's'), title: genTitle(r, g, g2), logline: genLogline(r, g, g2, tone),
-    primaryGenre: g, secondaryGenre: g2, tone, quality, low, high: clamp(low + spread, 5, 99), coverage: false,
+    primaryGenre: g, secondaryGenre: g2, tone, language, quality, low, high: clamp(low + spread, 5, 99), coverage: false,
     suggestedBudget, tier, leads, supports, writerId: randomWriter(s, r, quality),
     price: scriptPrice(quality, suggestedBudget), expires: s.t + r.int(2, 4), source,
   };
@@ -66,6 +73,7 @@ export function genScript(s: GameState, r: RNG, source: Script['source'] = 'mark
 export function refreshMarketplace(s: GameState) {
   const r = makeRng(s.seed, s.t, 'market');
   s.scripts = s.scripts.filter((x) => x.expires > s.t);
+  if (writersStrike(s)) return; // nothing new gets written
   while (s.scripts.length < 10) s.scripts.push(genScript(s, r));
 }
 
@@ -85,7 +93,7 @@ export function buyCoverage(s: GameState, scriptId: string) {
 function blankFilm(s: GameState, sc: Script, studioId: string): Film {
   return {
     id: nextId(s, 'f'), title: sc.title, studioId, logline: sc.logline,
-    primaryGenre: sc.primaryGenre, secondaryGenre: sc.secondaryGenre, tone: sc.tone,
+    primaryGenre: sc.primaryGenre, secondaryGenre: sc.secondaryGenre, tone: sc.tone, language: sc.language ?? 'en',
     stage: 'development', stageTurnsLeft: 1, createdT: s.t,
     budget: sc.suggestedBudget, tier: sc.tier, suggestedBudget: sc.suggestedBudget, marketing: 0,
     scriptQuality: sc.quality, scriptRange: sc.source === 'market' ? [sc.low, sc.high] : undefined, quality: 0, qualityKnown: false,
@@ -110,17 +118,17 @@ export function buyScript(s: GameState, scriptId: string, studioId = s.studio.id
 
 /** Build Your Own: hire a writer for N turns; quality is fixed when the draft is delivered. */
 export function commissionScript(s: GameState, o: {
-  genre: Genre; genre2?: Genre; tone: Tone; tier: BudgetTier; premise: string; writerId: string; turns: number; title?: string;
+  genre: Genre; genre2?: Genre; tone: Tone; tier: BudgetTier; premise: string; writerId: string; turns: number; title?: string; language?: string;
   ipId?: string; sequelOf?: string; franchiseId?: string;
 }): Film | undefined {
   const w = talent(s, o.writerId);
-  if (!w) return;
+  if (!w || writersStrike(s) || dealBlock(s, w.id, s.studio.id)) return;
   const r = makeRng(s.seed, s.t, 'commission', o.writerId);
-  const writerFee = Math.round(w.fee * (0.7 + o.turns * 0.15) / 10_000) * 10_000;
+  const writerFee = Math.round(w.fee * (0.7 + o.turns * 0.15) * dealFeeMult(s, w.id, s.studio.id) / 10_000) * 10_000;
   const sug = budgetFor(r, o.tier);
   const sc: Script = {
     id: nextId(s, 's'), title: o.title || genTitle(r, o.genre, o.genre2), logline: o.premise, primaryGenre: o.genre,
-    secondaryGenre: o.genre2, tone: o.tone, quality: 0, low: 0, high: 0, coverage: false, suggestedBudget: sug, tier: o.tier,
+    secondaryGenre: o.genre2, tone: o.tone, language: o.language ?? 'en', quality: 0, low: 0, high: 0, coverage: false, suggestedBudget: sug, tier: o.tier,
     leads: o.genre === 'Documentary' ? 0 : o.genre === 'Romance' ? 2 : 1, supports: o.genre === 'Documentary' ? 0 : 2,
     writerId: o.writerId, price: 0, expires: 0, source: o.ipId ? 'ip' : o.sequelOf ? 'sequel' : 'original',
     ipId: o.ipId, sequelOf: o.sequelOf, franchiseId: o.franchiseId,
@@ -130,7 +138,8 @@ export function commissionScript(s: GameState, o: {
   f.stageTurnsLeft = o.turns;
   // Writer skill + genre fit + time spent, with noise. Revealed as a range at delivery.
   const fit = 0.65 * w.genres[o.genre] + 0.35 * (o.genre2 ? w.genres[o.genre2] : w.genres[o.genre]);
-  f.scriptQuality = clamp(Math.round(0.55 * w.attrs.acting + 0.25 * fit + o.turns * 3.5 + r.normal(0, 7) + 4), 10, 98);
+  const langPenalty = speaks(w.languages, o.language) ? 0 : 8;
+  f.scriptQuality = clamp(Math.round(0.55 * w.attrs.acting + 0.25 * fit + o.turns * 3.5 + r.normal(0, 7) + 4 - langPenalty), 10, 98);
   f.crew.writer = { talentId: o.writerId, fee: writerFee };
   f.spent += writerFee;
   pay(s, s.studio.id, -writerFee, 'Development');

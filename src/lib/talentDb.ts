@@ -1,6 +1,7 @@
 // Read-only talent database plus the per-save career layer.
 import { ageAt } from './calendar';
-import { clamp } from './rng';
+import { clamp, makeRng } from './rng';
+import { deriveLanguages } from './languages';
 import { feeFor, overallOf } from './ratings';
 import { GENRES, MARKETS, type Genre, type GameState, type Market, type Talent, type TalentKind } from './types';
 
@@ -10,6 +11,7 @@ export type CompactPerson = {
   a: number[]; // star, acting, box, range, chem, rel, exp
   ge: number[]; re: number[]; tr: string[]; p: number; fee: number; bd: number;
   cr: [string, number, number][]; dy?: number;
+  la?: string[]; // languages
 };
 export type DbFile = { v: 1; source: 'tmdb' | 'demo'; generated: string; people: CompactPerson[] };
 
@@ -19,7 +21,7 @@ export function toCompact(t: Talent): CompactPerson {
     i: t.id, d: t.tmdbId, n: t.name, f: t.isFictional ? 1 : undefined, k: t.kind, b: t.birthDate, g: t.gender, c: t.nationality,
     a: [a.starPower, a.acting, a.boxOffice, a.range, a.chemistry, a.reliability, a.experience],
     ge: GENRES.map((g) => t.genres[g]), re: MARKETS.map((m) => t.regional[m]), tr: t.traits, p: t.potential,
-    fee: t.fee, bd: t.backendDemand, cr: t.credits.map((c) => [c.title, c.year, c.billing]), dy: t.debutYear,
+    fee: t.fee, bd: t.backendDemand, cr: t.credits.map((c) => [c.title, c.year, c.billing]), dy: t.debutYear, la: t.languages,
   };
 }
 
@@ -32,6 +34,7 @@ export function fromCompact(c: CompactPerson): Talent {
   MARKETS.forEach((m, i) => (regional[m] = c.re[i]));
   return {
     id: c.i, tmdbId: c.d, name: c.n, isFictional: !!c.f, kind: c.k, birthDate: c.b, gender: c.g, nationality: c.c,
+    languages: c.la ?? deriveLanguages(c.c, starPower, makeRng('lang', c.i)),
     attrs: { ...base, overall: overallOf(base, c.k) }, genres, regional, traits: c.tr as Talent['traits'], potential: c.p,
     fee: c.fee, backendDemand: c.bd, credits: c.cr.map(([title, year, billing]) => ({ title, year, billing })), debutYear: c.dy,
   };

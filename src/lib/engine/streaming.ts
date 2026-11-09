@@ -3,6 +3,8 @@ import { makeRng, clamp } from '../rng';
 import type { Film, GameState } from '../types';
 import { castMembers } from './production';
 import { msg, pay } from './util';
+import { seriesPull } from './tv';
+import { recession } from './shocks';
 
 export const LAUNCH_TURN = 26; // available from the start of year two
 export const launchCost = (s: GameState) => (s.settings.startBudget === 'indie' ? 40e6 : s.settings.startBudget === 'minimajor' ? 120e6 : 250e6);
@@ -44,15 +46,22 @@ export function advanceStreaming(s: GameState) {
   if (!sv) return;
   const r = makeRng(s.seed, s.t, 'stream');
   const mine = s.films.filter((f) => f.studioId === s.studio.id);
-  let library = 0;
+  let library = 0, burstFromSeries = 0;
   const pulls = new Map<string, number>();
   for (const f of mine) {
     const p = titlePull(s, f);
     if (p > 0) { pulls.set(f.id, p); library += p; }
   }
+  // Your own original series count too, and a new season brings a burst of sign-ups.
+  for (const x of s.series ?? []) {
+    if (x.studioId !== s.studio.id) continue;
+    const p = seriesPull(s, x);
+    library += p;
+    if (x.ownService && x.stage === 'airing') burstFromSeries += p * 0.25;
+  }
   sv.libraryValue = library;
   // New exclusive drops this turn add a burst of sign-ups.
-  let burst = 0;
+  let burst = burstFromSeries;
   for (const f of mine) {
     if (f.release && f.release.t === s.t && (f.release.type === 'streaming' || f.release.type === 'dayanddate')) burst += (pulls.get(f.id) ?? 0) * 0.6;
   }
@@ -60,7 +69,7 @@ export function advanceStreaming(s: GameState) {
   const rivalSubs = s.rivals.reduce((a, rv) => a + (rv.rivalSubs ?? 0), 0);
   const competition = clamp(1.15 - Math.log10(1 + rivalSubs / 1e8) * 0.2, 0.7, 1.1);
   const target = library * priceFactor * competition;
-  sv.churn = clamp(0.028 + (sv.price - 9.99) * 0.004 + (library < 1e6 ? 0.01 : 0), 0.01, 0.12);
+  sv.churn = clamp(0.028 + (sv.price - 9.99) * 0.004 + (library < 1e6 ? 0.01 : 0) + (recession(s) ? 0.012 : 0), 0.01, 0.12);
   const lost = sv.subscribers * sv.churn * 12 / 26;
   const gained = Math.max(0, (target - sv.subscribers) * 0.16) + burst + sv.subscribers * sv.churn * 12 / 26 * 0.7 * Math.min(1.3, target / Math.max(1, sv.subscribers));
   sv.subscribers = Math.max(5000, Math.round(sv.subscribers + gained - lost + r.normal(0, sv.subscribers * 0.005)));

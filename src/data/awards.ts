@@ -1,12 +1,26 @@
 // Fictional awards bodies modelled loosely on real ones. Turns are within-year (0–25).
 
-export type AwardBody = { id: string; name: string; short: string; nomTurn: number; ceremonyTurn: number; weight: number; critics: number };
+export type AwardBody = { id: string; name: string; short: string; nomTurn: number; ceremonyTurn: number; weight: number; critics: number; film?: boolean; tv?: boolean };
 export const AWARD_BODIES: AwardBody[] = [
-  { id: 'lens', name: 'Golden Lens Awards', short: 'Golden Lens', nomTurn: 0, ceremonyTurn: 1, weight: 0.6, critics: 0.4 },
+  { id: 'lens', name: 'Golden Lens Awards', short: 'Golden Lens', nomTurn: 0, ceremonyTurn: 1, weight: 0.6, critics: 0.4, tv: true },
   { id: 'brit', name: 'British Screen Awards', short: 'BSA', nomTurn: 1, ceremonyTurn: 3, weight: 0.7, critics: 0.6 },
   { id: 'sac', name: "Screen Actors' Circle", short: 'SAC', nomTurn: 1, ceremonyTurn: 4, weight: 0.7, critics: 0.5 },
   { id: 'academy', name: 'The Academy Honours', short: 'Academy', nomTurn: 2, ceremonyTurn: 5, weight: 1, critics: 0.6 },
+  // Television's big night (think Emmys): nominations in July, ceremony in September.
+  { id: 'crystal', name: 'Crystal Television Awards', short: 'Crystal', nomTurn: 14, ceremonyTurn: 17, weight: 0.9, critics: 0.6, film: false, tv: true },
 ];
+
+/** TV categories. The Golden Lens has a short TV list; the Crystal Awards are all TV. */
+export function tvCategoriesFor(bodyId: string): string[] {
+  if (bodyId === 'lens') return ['Best TV Drama', 'Best TV Comedy', 'Best TV Limited Series', 'Best Actor – Television', 'Best Actress – Television'];
+  if (bodyId === 'crystal') return [
+    'Best Drama Series', 'Best Comedy Series', 'Best Limited Series', 'Best Docuseries', 'Best Animated Series',
+    'Best Actor in a Drama Series', 'Best Actress in a Drama Series', 'Best Actor in a Comedy Series', 'Best Actress in a Comedy Series',
+    'Best Actor in a Limited Series', 'Best Actress in a Limited Series',
+  ];
+  return [];
+}
+export const TV_CATEGORY_SET = new Set([...tvCategoriesFor('lens'), ...tvCategoriesFor('crystal')]);
 
 export type Festival = { id: string; name: string; turn: number; month: string; prestige: number; indie: boolean };
 export const FESTIVALS: Festival[] = [

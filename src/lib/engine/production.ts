@@ -1,10 +1,13 @@
 // Production pipeline: development → pre-production → filming → post → ready.
 import { tierInfo, tierOf } from '../constants';
 import { makeRng, clamp } from '../rng';
+import { speaks } from '../languages';
 import { genreFit, getDB, pairKey, talent } from '../talentDb';
 import type { CrewRole, Film, GameState, Talent } from '../types';
 import { headline, msg, spend } from './util';
 import { setCommit } from './scripts';
+import { facilityLevel, filmFacilityEffect } from './facilities';
+import { actorsStrike, writersStrike } from './shocks';
 
 const HOUSE_CREW = 45;
 
@@ -19,14 +22,16 @@ export function castMembers(s: GameState, f: Film): { t: Talent; lead: boolean }
 export function qualityBreakdown(s: GameState, f: Film): QualityBreakdown {
   const g = f.primaryGenre, g2 = f.secondaryGenre;
   const dir = f.crew.director ? talent(s, f.crew.director.talentId) : undefined;
-  const director = dir ? 0.7 * dir.attrs.acting + 0.3 * genreFit(dir, g, g2) : 30;
+  const director = dir ? 0.7 * dir.attrs.acting + 0.3 * genreFit(dir, g, g2) - (speaks(dir.languages, f.language) ? 0 : 6) : 30;
   const members = castMembers(s, f);
   let cast = 58;
   if (members.length) {
     let w = 0, sum = 0;
     for (const m of members) {
       const k = m.lead ? 2 : 1;
-      w += k; sum += k * (0.55 * genreFit(m.t, g, g2) + 0.45 * m.t.attrs.acting);
+      // Performing outside your languages costs a lot on screen (much less in animation, where voices can be cast and dubbed).
+      const langPenalty = speaks(m.t.languages, f.language) ? 0 : f.primaryGenre === 'Animation' ? 3 : 12;
+      w += k; sum += k * (0.55 * genreFit(m.t, g, g2) + 0.45 * m.t.attrs.acting - langPenalty);
     }
     cast = sum / w;
     const missing = Math.max(0, f.leads - members.filter((m) => m.lead).length);
@@ -60,6 +65,7 @@ export function qualityBreakdown(s: GameState, f: Film): QualityBreakdown {
     if (m.t.traits.includes('Perfectionist')) traits += 1.5;
   }
   if (dir?.traits.includes('Perfectionist')) traits += 2;
+  traits += f.facility?.quality ?? 0;
   const raw = 0.36 * f.scriptQuality + 0.26 * director + 0.38 * cast;
   let q = raw * chemistry * crew * budget * f.luck + traits;
   q = 50 + (q - 50) * 1.3;
@@ -71,6 +77,7 @@ export const computeQuality = (s: GameState, f: Film) => qualityBreakdown(s, f).
 export function greenlightIssues(s: GameState, f: Film): string[] {
   const out: string[] = [];
   if (f.stage !== 'preproduction') out.push('Film is not in pre-production.');
+  if (actorsStrike(s)) out.push("The actors' strike: nothing can start shooting until it ends.");
   if (!f.crew.director) out.push('Hire a director.');
   const leads = f.cast.filter((c) => c.role === 'lead').length;
   if (leads < f.leads) out.push(`Cast ${f.leads - leads} more lead${f.leads - leads > 1 ? 's' : ''}.`);
@@ -80,15 +87,22 @@ export function greenlightIssues(s: GameState, f: Film): string[] {
 /** Start filming. Production budget is paid across the filming turns. */
 export function greenlight(s: GameState, f: Film, cofinance?: { partner: string; share: number }) {
   if (greenlightIssues(s, f).length) return;
-  const ti = tierInfo(f.tier);
   f.stage = 'filming';
-  f.stageTurnsLeft = ti.filming + (f.primaryGenre === 'Animation' ? 2 : 0);
+  f.facility = filmFacilityEffect(s, f);
+  f.stageTurnsLeft = filmingTurns(s, f);
   f.luck = clamp(makeRng(s.seed, f.id, 'luck').normal(1, 0.035), 0.88, 1.12);
   if (cofinance) f.cofinance = cofinance;
   const until = s.t + f.stageTurnsLeft;
   for (const c of f.cast) setCommit(s, c.talentId, f.id, f.studioId, until);
   if (f.crew.director) setCommit(s, f.crew.director.talentId, f.id, f.studioId, until + tierInfo(f.tier).post);
 }
+
+/** Animation takes longer; your own animation unit (level 2+) claws a fortnight back. */
+function filmingTurns(s: GameState, f: Film) {
+  const anim = f.primaryGenre === 'Animation';
+  return tierInfo(f.tier).filming + (anim ? 2 : 0) - (anim && f.studioId === s.studio.id && facilityLevel(s, 'animation') >= 2 ? 1 : 0);
+}
+const postTurns = (s: GameState, f: Film) => Math.max(1, tierInfo(f.tier).post - (f.studioId === s.studio.id && facilityLevel(s, 'post') ? 1 : 0));
 
 export function setBudget(f: Film, budget: number) {
   f.budget = Math.max(300_000, Math.round(budget / 1e5) * 1e5);
@@ -101,12 +115,12 @@ export function shelve(s: GameState, f: Film) {
   for (const c of Object.values(f.crew)) if (c && s.commitments[c.talentId]?.filmId === f.id) delete s.commitments[c.talentId];
 }
 
-export const testScreeningCost = (f: Film) => Math.max(150_000, Math.round(f.budget * 0.006 / 10_000) * 10_000);
+export const testScreeningCost = (f: Film, s?: GameState) => s && f.studioId === s.studio.id && facilityLevel(s, 'post') ? 0 : Math.max(150_000, Math.round(f.budget * 0.006 / 10_000) * 10_000);
 export const reshootCost = (f: Film) => Math.round(f.budget * 0.07 / 1e5) * 1e5;
 
 export function testScreening(s: GameState, f: Film) {
   if (f.testRange || (f.stage !== 'post' && f.stage !== 'ready')) return;
-  spend(s, f, testScreeningCost(f), 'Production');
+  spend(s, f, testScreeningCost(f, s), 'Production');
   const q = computeQuality(s, f);
   const r = makeRng(s.seed, f.id, 'test');
   const mid = q + r.normal(0, 3);
@@ -162,6 +176,7 @@ export function advanceProduction(s: GameState) {
     const mine = f.studioId === s.studio.id;
     switch (f.stage) {
       case 'development':
+        if (writersStrike(s)) break; // pens down
         if (--f.stageTurnsLeft <= 0) {
           f.stage = 'preproduction';
           f.stageTurnsLeft = 0;
@@ -174,14 +189,14 @@ export function advanceProduction(s: GameState) {
         }
         break;
       case 'filming': {
-        const ti = tierInfo(f.tier);
-        const instalment = Math.min(f.budget / (ti.filming + (f.primaryGenre === 'Animation' ? 2 : 0)), f.budget - (f.prodPaid ?? 0));
+        if (actorsStrike(s) && f.primaryGenre !== 'Animation') break; // cameras stop, and so does the spend
+        const instalment = Math.min(f.budget / filmingTurns(s, f), f.budget - (f.prodPaid ?? 0));
         f.prodPaid = (f.prodPaid ?? 0) + instalment;
-        spend(s, f, instalment, 'Production');
+        spend(s, f, instalment * (1 - (f.facility?.saving ?? 0)), 'Production');
         filmingEvent(s, f);
         if (--f.stageTurnsLeft <= 0) {
           f.stage = 'post';
-          f.stageTurnsLeft = ti.post;
+          f.stageTurnsLeft = postTurns(s, f);
           for (const c of f.cast) if (s.commitments[c.talentId]?.filmId === f.id) s.commitments[c.talentId].until = s.t;
           if (mine) msg(s, 'news', `${f.title} wraps filming`, 'Into post-production.', { link: `/film/${f.id}` });
         }
@@ -203,7 +218,7 @@ export function remainingProductionCost(f: Film): number {
   if (f.stage === 'filming') {
     const ti = tierInfo(f.tier);
     void ti;
-    return Math.max(0, f.budget - (f.prodPaid ?? 0));
+    return Math.max(0, f.budget - (f.prodPaid ?? 0)) * (1 - (f.facility?.saving ?? 0));
   }
   if (f.stage === 'development' || f.stage === 'preproduction') return f.budget;
   return 0;
