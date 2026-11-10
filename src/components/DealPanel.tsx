@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useGame } from '@/store/game';
 import { formatShort } from '@/lib/calendar';
 import { money } from '@/lib/format';
-import { DEAL_INFO, canHaveDeal, dealFor, dealWillingness, retainerPerTurn, signDeal } from '@/lib/engine/deals';
+import { dealLabel, canHaveDeal, dealFor, dealWillingness, retainerPerTurn, signDeal } from '@/lib/engine/deals';
 import { studioById } from '@/lib/engine/util';
 import type { DealKind, Talent } from '@/lib/types';
 import { Button } from './ui';
@@ -21,18 +21,18 @@ export function DealPanel({ t }: { t: Talent }) {
   const per = retainerPerTurn(t, kind);
   return (
     <div className="mt-4 rounded-lg border border-line bg-panel2 p-3 text-sm">
-      <div className="label mb-1">Overall & first-look deals</div>
+      <div className="label mb-1">Studio deals</div>
       {theirs ? (
-        <div className="text-amber-300">On a {DEAL_INFO[d.kind].name.toLowerCase()} with {studioById(s, d.studioId)?.name} until {formatShort(d.untilT)}.{d.kind === 'overall' ? ' You can’t hire them.' : ' They cost you 20% more.'}</div>
+        <div className="text-amber-300">On a {dealLabel(d.kind, t).name.toLowerCase()} with {studioById(s, d.studioId)?.name} until {formatShort(d.untilT)}.{d.kind === 'overall' ? ' You can’t hire them.' : ' They cost you 20% more.'}</div>
       ) : (
         <>
-          {d && <div className="mb-2 text-emerald-300">On your {DEAL_INFO[d.kind].name.toLowerCase()} until {formatShort(d.untilT)}.</div>}
+          {d && <div className="mb-2 text-emerald-300">On your {dealLabel(d.kind, t).name.toLowerCase()} until {formatShort(d.untilT)}.</div>}
           <div className="flex gap-1.5">
             {(['first-look', 'overall'] as DealKind[]).map((k) => (
-              <button key={k} onClick={() => setKind(k)} className={`flex-1 rounded-lg border px-2 py-1.5 text-xs ${kind === k ? 'border-gold bg-gold/10' : 'border-line'}`}>{DEAL_INFO[k].name}</button>
+              <button key={k} onClick={() => setKind(k)} className={`flex-1 rounded-lg border px-2 py-1.5 text-xs ${kind === k ? 'border-gold bg-gold/10' : 'border-line'}`}>{dealLabel(k, t).name}</button>
             ))}
           </div>
-          <div className="mt-1.5 text-xs text-muted">{DEAL_INFO[kind].blurb}</div>
+          <div className="mt-1.5 text-xs text-muted">{dealLabel(kind, t).blurb}</div>
           <div className="mt-2 flex items-center gap-2">
             <span className="text-xs text-muted">Years</span>
             {[1, 2, 3, 4].map((y) => <button key={y} onClick={() => setYears(y)} className={`rounded border px-2 py-0.5 text-xs ${years === y ? 'border-gold text-gold' : 'border-line'}`}>{y}</button>)}

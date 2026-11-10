@@ -8,6 +8,8 @@ import { headline, msg, spend } from './util';
 import { setCommit } from './scripts';
 import { facilityLevel, filmFacilityEffect } from './facilities';
 import { actorsStrike, writersStrike } from './shocks';
+import { agencyNudge } from './agencies';
+import { relation } from './relationships';
 
 const HOUSE_CREW = 45;
 
@@ -43,6 +45,7 @@ export function qualityBreakdown(s: GameState, f: Film): QualityBreakdown {
   for (let i = 0; i < members.length; i++) for (let j = i + 1; j < members.length; j++) {
     const n = db.costars.get(pairKey(members[i].t.id, members[j].t.id));
     if (n) chem += Math.min(8, n * 2);
+    chem += clamp(relation(s, members[i].t.id, members[j].t.id), -6, 6);
   }
   chem += members.filter((m) => m.t.traits.includes('Team Player')).length * 3;
   chem += members.filter((m) => m.t.traits.includes('Prankster')).length * 1.5;
@@ -110,6 +113,7 @@ export function setBudget(f: Film, budget: number) {
 }
 
 export function shelve(s: GameState, f: Film) {
+  if (f.studioId === s.studio.id) for (const c of f.cast) agencyNudge(s, c.talentId, -0.3, 'You shelved a film with their clients in it.');
   f.stage = 'shelved';
   for (const c of f.cast) if (s.commitments[c.talentId]?.filmId === f.id) delete s.commitments[c.talentId];
   for (const c of Object.values(f.crew)) if (c && s.commitments[c.talentId]?.filmId === f.id) delete s.commitments[c.talentId];

@@ -10,6 +10,8 @@ import { setCommit } from './scripts';
 import { dealBlock, dealFeeMult } from './deals';
 import { seriesFacilityEffect } from './facilities';
 import { actorsStrike, feeShockMult, writersStrike } from './shocks';
+import { agencyBlock, agencyFeeMult, agencyNudge } from './agencies';
+import { linkSpinoff } from './spinoffs';
 import { headline, msg, nextId, pay, studioById } from './util';
 
 export type FormatInfo = { lengths: number[]; runtimes: (30 | 45 | 60)[]; budget: number; oneSeason?: boolean; syndicates?: boolean; blurb: string };
@@ -36,7 +38,7 @@ export const airingTurns = (x: Series) => (airsAllAtOnce(x) ? 2 : Math.min(13, M
 
 export function developSeries(s: GameState, o: {
   title: string; logline: string; format: SeriesFormat; genre: Genre; genre2?: Genre; tone: Tone; language: string;
-  episodes: number; runtime: 30 | 45 | 60; budgetPerEp: number; writerId: string; turns: number;
+  episodes: number; runtime: 30 | 45 | 60; budgetPerEp: number; writerId: string; turns: number; spinoffOf?: string;
 }): Series | undefined {
   const w = talent(s, o.writerId);
   if (!w || writersStrike(s) || dealBlock(s, w.id, s.studio.id)) return;
@@ -53,6 +55,7 @@ export function developSeries(s: GameState, o: {
     offers: [], seasons: [], spent: fee, revenue: 0, events: [], luck: clamp(r.normal(1, 0.04), 0.9, 1.1),
   };
   pay(s, s.studio.id, -fee, 'TV development');
+  if (o.spinoffOf) linkSpinoff(s, x, o.spinoffOf);
   setCommit(s, o.writerId, x.id, s.studio.id, s.t + o.turns);
   seriesList(s).push(x);
   return x;
@@ -66,7 +69,7 @@ export function askingPerEp(s: GameState, t: Talent, x: Series, role: 'lead' | '
   if (x.format === 'Soap') fee *= 0.5;
   if (t.attrs.starPower >= 85) fee *= 1.3; // film stars charge a premium to do TV
   fee *= 1 - loyaltyDiscount(t, loyaltyTo(s, t.id, x.studioId).total);
-  fee *= Math.pow(1.06, Math.max(0, x.season - 1));
+  fee *= Math.pow(1.06, Math.max(0, x.season - 1)) * dealFeeMult(s, t.id, x.studioId) * agencyFeeMult(s, t, x.studioId);
   return Math.max(5_000, Math.round(fee / 1_000) * 1_000);
 }
 
@@ -75,6 +78,9 @@ const counters = new Map<string, number>(); // seriesId:talentId -> last counter
 
 export function canApproachRegular(s: GameState, t: Talent, x: Series): string | null {
   if (x.regulars.some((r) => r.talentId === t.id)) return 'Already a series regular.';
+  const exclusive = dealBlock(s, t.id, x.studioId);
+  if (exclusive) return exclusive;
+  if (x.studioId === s.studio.id) { const frozen = agencyBlock(s, t); if (frozen) return frozen; }
   const walked = s.talentOverrides[t.id]?.walkedUntil;
   if (walked && walked > s.t) return `${t.name}'s agent isn't taking your calls for a while.`;
   if (!isAvailable(s, t.id) && s.commitments[t.id]?.filmId !== x.id) return `${t.name} is busy right now.`;
@@ -97,6 +103,7 @@ export function approachRegular(s: GameState, seriesId: string, talentId: string
   if ((prior && feePerEp >= prior) || value >= 1 + r.range(-0.04, 0.05)) {
     x.regulars.push({ talentId, role, feePerEp });
     counters.delete(key);
+    agencyNudge(s, talentId, 0.3);
     return { status: 'accepted', note: `${t.name} signs on as a series regular.` };
   }
   if (value >= 0.78) {
@@ -105,6 +112,7 @@ export function approachRegular(s: GameState, seriesId: string, talentId: string
     return { status: 'countered', counter, note: 'We like the show. Meet us at this number per episode.' };
   }
   override(s, talentId).walkedUntil = s.t + 3;
+  agencyNudge(s, talentId, -0.4);
   return { status: 'rejected', note: "That's not serious money for a series regular. We're out." };
 }
 
@@ -112,6 +120,7 @@ export function dropRegular(s: GameState, seriesId: string, talentId: string) {
   const x = seriesById(s, seriesId);
   if (!x || !['development', 'pitching', 'preproduction', 'between'].includes(x.stage)) return;
   x.regulars = x.regulars.filter((r) => r.talentId !== talentId);
+  if (x.studioId === s.studio.id) agencyNudge(s, talentId, -0.5, 'You dropped one of their clients.');
 }
 
 // ---------- Quality & audience ----------
@@ -380,7 +389,10 @@ function seasonEnd(s: GameState, x: Series) {
   const viewers = cur.viewers.reduce((a, b) => a + b, 0) / Math.max(1, cur.viewers.length);
   const ch = channelById(x.contract?.channelId);
   const exp = ch ? expectation(ch) : ownServiceReach(s) * 0.6;
+  const hitOwn = x.ownService && viewers >= exp * 1.6;
+  if (hitOwn && s.studio.streaming) s.studio.streaming.exclusivesBoost = Math.min(0.3, (s.studio.streaming.exclusivesBoost ?? 0) + 0.05);
   const result = { n: x.season, quality: cur.quality, critic: cur.critic, audience: cur.audience, viewers, episodes: x.episodes, airedFrom: s.t - airingTurns(x) + 1, feePerEp: x.contract?.feePerEp ?? 0 } as Series['seasons'][number];
+  if (x.ownService) result.pull = Math.round(seriesPullRaw(s, x));
   x.seasons.push(result);
   x.current = undefined;
   x.buzz = (x.buzz ?? 0) * 0.5; // award buzz fades season by season
@@ -401,6 +413,9 @@ function seasonEnd(s: GameState, x: Series) {
     }
   }
   if (hit) for (const reg of x.regulars) { const ov = override(s, reg.talentId); ov.star = (ov.star ?? 0) + 2; }
+  // A hit season warms the franchise it belongs to.
+  const fr = x.franchiseId ? s.franchises.find((f) => f.id === x.franchiseId) : undefined;
+  if (fr && (hit || (x.ownService && cur.audience >= 75))) fr.heat += 0.1;
   for (const reg of x.regulars) addLoyalty(s, reg.talentId, x.studioId, LOYALTY.film * 0.5);
   const owner = studioById(s, x.studioId);
   if (owner) owner.prestige = clamp(owner.prestige + (cur.critic >= 85 ? 1 : 0));
@@ -437,16 +452,18 @@ function cancel(s: GameState, x: Series, why: string) {
   note(s, x, 'news', `${x.title} cancelled`, why, { link: `/tv/${x.id}` });
 }
 
-/** Own-service series pull subscribers like films do. */
-export function seriesPull(s: GameState, x: Series): number {
-  if (!x.ownService) return 0;
+/** Subscribers a series pulls to a streaming service. Bigger, longer-running and better shows pull more; a season on air pulls hardest. */
+export function seriesPullRaw(s: GameState, x: Series): number {
   const last = x.seasons.at(-1);
   const cur = x.stage === 'airing' ? x.current : undefined;
   if (!last && !cur) return 0;
-  const q = cur ? 0.5 * cur.quality + 0.5 * cur.audience : 0.5 * last!.quality + 0.5 * last!.audience;
+  const q = cur ? 0.5 * cur.quality + 0.5 * (cur.audience || cur.quality) : 0.5 * last!.quality + 0.5 * last!.audience;
   const age = cur ? 0 : Math.max(0, (s.t - last!.airedFrom) / 26);
-  return 320_000 * Math.pow(q / 65, 2.4) * (1 + 0.3 * Math.max(0, x.seasons.length - (cur ? 0 : 1))) * (x.runtime / 60 + 0.5) * Math.pow(0.75, age);
+  const scale = clamp(Math.sqrt((x.budgetPerEp * x.episodes) / 20e6), 0.5, 2.5);
+  const run = 1 + 0.25 * Math.max(0, x.seasons.length - (cur ? 0 : 1));
+  return 550_000 * Math.pow(q / 65, 2.2) * scale * run * (1 + (x.buzz ?? 0) * 0.2) * (0.8 + starOf(s, x) / 250) * Math.pow(0.85, age);
 }
+export const seriesPull = (s: GameState, x: Series) => (x.ownService ? seriesPullRaw(s, x) : 0);
 
 export const seriesProfit = (x: Series) => x.revenue - x.spent;
 export const describeLanguage = (x: Series) => langName(x.language);

@@ -7,6 +7,8 @@ import { filmById, msg, nextId, spend, studioById } from './util';
 import { setCommit } from './scripts';
 import { dealBlock, dealFeeMult } from './deals';
 import { feeShockMult } from './shocks';
+import { agencyBlock, agencyFeeMult, agencyNudge } from './agencies';
+import { feudWith, friendBonus } from './relationships';
 import { loyaltyAppeal, loyaltyDiscount, loyaltyTo, PICKY_BYPASS_AT, SKIP_WAR_AT } from './loyalty';
 
 export type Role = 'lead' | 'support' | CrewRole;
@@ -30,7 +32,7 @@ export function askingFee(s: GameState, t: Talent, film: Film, role: Role, studi
     if (slot) fee = Math.max(fee, slot.fee) * (slot.options > 1 ? 1.1 : 1.4);
   }
   fee *= 1 - loyaltyDiscount(t, loyaltyTo(s, t.id, studioId).total);
-  fee *= dealFeeMult(s, t.id, studioId) * feeShockMult(s);
+  fee *= dealFeeMult(s, t.id, studioId) * feeShockMult(s) * agencyFeeMult(s, t, studioId) * (1 - friendBonus(s, t, film));
   return Math.max(20_000, Math.round(fee / 10_000) * 10_000);
 }
 
@@ -43,7 +45,7 @@ function appeal(s: GameState, t: Talent, film: Film, studioId: string): number {
   a += dir ? (dir.attrs.overall - 55) / 220 : -0.04;
   const loyal = loyaltyTo(s, t.id, studioId).total;
   if (t.traits.includes('Picky') && loyal < PICKY_BYPASS_AT) a += (film.scriptQuality - 70) / 60;
-  return a + loyaltyAppeal(loyal);
+  return a + loyaltyAppeal(loyal) + friendBonus(s, t, film) * 0.5;
 }
 
 export type NegResult = { kind: 'opened'; neg: Negotiation } | { kind: 'bidding'; war: BiddingWar } | { kind: 'error'; reason: string };
@@ -52,6 +54,9 @@ export function canApproach(s: GameState, t: Talent, film: Film): string | null 
   if (!isAvailable(s, t.id)) return `${t.name} is busy until later.`;
   const exclusive = dealBlock(s, t.id, film.studioId);
   if (exclusive) return exclusive;
+  if (film.studioId === s.studio.id) { const frozen = agencyBlock(s, t); if (frozen) return frozen; }
+  const feud = feudWith(s, t, film);
+  if (feud) return `${t.name} refuses to work with ${feud.name}.`;
   const walked = s.talentOverrides[t.id]?.walkedUntil;
   if (walked && walked > s.t) return `${t.name}'s agent isn't taking your calls for a while.`;
   if (film.cast.some((c) => c.talentId === t.id)) return 'Already cast.';
@@ -65,6 +70,7 @@ export function openNegotiation(s: GameState, talentId: string, filmId: string, 
   if (!t || !film) return { kind: 'error', reason: 'Not found' };
   const block = canApproach(s, t, film);
   if (block) return { kind: 'error', reason: block };
+  if (role === 'support' && t.attrs.starPower >= 75 && loyaltyTo(s, t.id, s.studio.id).total < 3) return { kind: 'error', reason: `${t.name} only does leading roles now.` };
   const key = negKey(filmId, talentId);
   const asking = askingFee(s, t, film, role);
   // Hot talent can spark a bidding war, unless they're loyal enough to talk to you first.
@@ -125,6 +131,7 @@ export function respond(s: GameState, key: string, offer: Offer): Negotiation | 
     neg.history.push({ from: 'agent', fee: 0, backend: 0, billing: 0, options: 0, note: "We're too far apart. My client is moving on." });
     neg.status = 'walked';
     walk(s, t.id, 3);
+    agencyNudge(s, t.id, -1, `Talks with ${t.name} collapsed.`);
     return neg;
   }
   if (value >= 0.72) {
@@ -135,6 +142,7 @@ export function respond(s: GameState, key: string, offer: Offer): Negotiation | 
       note: r.pick(['We can get there, but not at that number.', 'Close. Meet us here and we sign today.', 'My client loves the script. The money needs to be right.']),
     });
   } else {
+    agencyNudge(s, t.id, -0.4);
     neg.history.push({ from: 'agent', fee: 0, backend: 0, billing: 0, options: 0, note: r.pick(["That's not a serious offer.", 'Call me back when you mean it.', 'We expected more respect for my client.']) });
   }
   return neg;
@@ -152,11 +160,13 @@ export function sign(s: GameState, film: Film, t: Talent, role: Role, offer: Off
     film.crew[role] = { talentId: t.id, fee: offer.fee };
   }
   spend(s, film, offer.fee, 'Talent');
+  if (film.studioId === s.studio.id) agencyNudge(s, t.id, 0.4);
   const busyTurns = film.stage === 'filming' ? film.stageTurnsLeft : 2 + tierInfo(film.tier).filming;
   setCommit(s, t.id, film.id, film.studioId, s.t + busyTurns);
 }
 
 export function release(s: GameState, film: Film, talentId: string) {
+  if (film.studioId === s.studio.id) agencyNudge(s, talentId, -0.5, 'You dropped one of their clients.');
   film.cast = film.cast.filter((c) => c.talentId !== talentId);
   for (const k of Object.keys(film.crew) as CrewRole[]) if (film.crew[k]?.talentId === talentId) delete film.crew[k];
   const c = s.commitments[talentId];

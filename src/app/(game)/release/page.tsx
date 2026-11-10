@@ -9,7 +9,8 @@ import { money } from '@/lib/format';
 import { STREAMER_BUYERS } from '@/data/studios';
 import { forecastGross, salePrice, scheduleRelease, unschedule } from '@/lib/engine/boxoffice';
 import { filmById, studioById } from '@/lib/engine/util';
-import type { ReleaseType, ScreenPlan } from '@/lib/types';
+import type { CampaignItem, ReleaseType, ScreenPlan } from '@/lib/types';
+import { CAMPAIGN, CAMPAIGN_ITEMS, campaignBlocked, campaignCost, moveFee, moveRelease } from '@/lib/engine/marketing';
 import { Button, Empty, Field, PageHeader, Panel } from '@/components/ui';
 
 const TYPES: { id: ReleaseType; label: string; d: string }[] = [
@@ -32,17 +33,20 @@ export default function ReleasePlanner() {
   const [mkt, setMkt] = useState(0.5);
   const [buyer, setBuyer] = useState(STREAMER_BUYERS[0]);
   const [err, setErr] = useState<string | null>(null);
+  const [campaign, setCampaign] = useState<CampaignItem[]>([]);
+  const [moveT, setMoveT] = useState(0);
 
   const weeks = useMemo(() => s ? Array.from({ length: 26 }, (_, i) => s.t + i) : [], [s]);
   if (!s) return null;
   const marketing = f ? Math.round(f.budget * mkt / 1e5) * 1e5 : 0;
   const forecast = f && type !== 'sold' && type !== 'streaming' ? forecastGross(s, f, { t, screens, marketing, type }) : 0;
   const offer = f && type === 'sold' ? salePrice(s, f, buyer) : 0;
+  const extras = f ? campaign.reduce((a, i) => a + campaignCost(s, f, i), 0) : 0;
   const releasesAt = (tt: number) => s.films.filter((x) => x.release && x.release.t === tt && x.release.type !== 'sold');
 
   const confirm = () => {
     if (!f) return;
-    const e = act((d) => scheduleRelease(d, filmById(d, f.id)!, { type, t: type === 'sold' ? d.t : t, screens, marketing, buyer, price: type === 'sold' ? offer : undefined }));
+    const e = act((d) => scheduleRelease(d, filmById(d, f.id)!, { type, t: type === 'sold' ? d.t : t, screens, marketing, buyer, price: type === 'sold' ? offer : undefined, campaign: type === 'sold' ? [] : campaign }));
     if (e) setErr(e); else router.push(`/film/${f.id}`);
   };
 
@@ -57,6 +61,23 @@ export default function ReleasePlanner() {
             {f?.release ? (
               <div className="mt-4 space-y-3 text-sm">
                 <div>Scheduled: <span className="text-gold">{TYPES.find((x) => x.id === f.release!.type)?.label}</span> on {formatDate(f.release.t)} with {money(f.marketing)} marketing.</div>
+                {!!f.campaign?.length && <div>Campaign: {f.campaign.map((i) => CAMPAIGN[i].name).join(' · ')}</div>}
+                {f.tracking && f.tracking.length > 0 && (
+                  <div className="rounded-lg bg-panel2 p-3">
+                    <div className="label mb-1">Opening-week tracking</div>
+                    <div className="text-lg font-semibold text-gold">{money(f.tracking.at(-1)!.low)} – {money(f.tracking.at(-1)!.high)}</div>
+                    <div className="mt-1 space-y-0.5 text-xs text-muted">{f.tracking.slice(0, -1).reverse().slice(0, 4).map((x) => <div key={x.t}>{formatShort(x.t)}: {money(x.low)} – {money(x.high)}</div>)}</div>
+                  </div>
+                )}
+                {f.release.t > s.t && f.release.type !== 'sold' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select className="select" value={moveT || f.release.t} onChange={(e) => setMoveT(Number(e.target.value))}>
+                      {weeks.slice(f.release.type === 'streaming' ? 1 : 2).map((tt) => <option key={tt} value={tt}>{formatDate(tt)} · {MONTH_HEAT[monthOf(tt)].toFixed(2)}× · {releasesAt(tt).length} releases</option>)}
+                    </select>
+                    <Button size="sm" variant="ghost" disabled={!moveT || moveT === f.release.t} onClick={() => setErr(act((d) => moveRelease(d, filmById(d, f.id)!, moveT)) ?? 'Release date moved.')}>Move date ({money(moveFee(f))})</Button>
+                  </div>
+                )}
+                {err && <div className="text-xs text-gold">{err}</div>}
                 {f.release.t > s.t && <Button variant="ghost" size="sm" onClick={() => act((d) => unschedule(d, filmById(d, f.id)!))}>Unschedule (marketing spend is lost)</Button>}
               </div>
             ) : f && (
@@ -83,11 +104,25 @@ export default function ReleasePlanner() {
                     <Field label={`Marketing (P&A) — ${money(marketing)}${type === 'streaming' ? ' (halved for streaming)' : ''}`} hint={`${Math.round(mkt * 100)}% of the production budget.`}>
                       <input type="range" min={0.05} max={1.5} step={0.05} value={mkt} onChange={(e) => setMkt(Number(e.target.value))} className="w-full accent-[#D4AF37]" />
                     </Field>
+                    <Field label={`Campaign extras${extras ? ` — ${money(extras)}` : ''}`}>
+                      <div className="space-y-1.5">
+                        {CAMPAIGN_ITEMS.filter((i) => type !== 'streaming' || i === 'trailer' || i === 'social' || i === 'premiere').map((i) => {
+                          const blocked = campaignBlocked(s, i);
+                          const on = campaign.includes(i);
+                          return (
+                            <label key={i} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${on ? 'border-gold bg-gold/10' : 'border-line bg-panel2'} ${blocked ? 'opacity-40' : ''}`}>
+                              <input type="checkbox" className="mt-1 accent-[#D4AF37]" disabled={!!blocked} checked={on} onChange={() => setCampaign(on ? campaign.filter((x) => x !== i) : [...campaign, i])} />
+                              <span className="flex-1"><span className="font-medium">{CAMPAIGN[i].name}</span> <span className="text-gold">{campaignCost(s, f, i) ? money(campaignCost(s, f, i)) : 'free'}</span><span className="block text-xs text-muted">{blocked ?? CAMPAIGN[i].blurb}</span></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </Field>
                     {forecast > 0 && <div className="rounded-lg bg-panel2 p-3 text-sm">Tracking suggests <span className="font-semibold text-gold">{money(forecast * 0.6)} – {money(forecast * 1.5)}</span> worldwide. Reviews will move it a lot.</div>}
                   </>
                 )}
                 {err && <div className="text-sm text-red-400">{err}</div>}
-                <Button variant="ticket" onClick={confirm} disabled={type !== 'sold' && s.studio.cash < marketing}>{type === 'sold' ? 'Sell' : 'Lock it in'}</Button>
+                <Button variant="ticket" onClick={confirm} disabled={type !== 'sold' && s.studio.cash < marketing + extras}>{type === 'sold' ? 'Sell' : 'Lock it in'}</Button>
               </div>
             )}
           </Panel>

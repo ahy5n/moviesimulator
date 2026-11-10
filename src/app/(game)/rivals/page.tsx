@@ -42,6 +42,9 @@ export default function Rivals() {
             <div className="flex justify-between"><span className="text-muted">War chest</span><span>{money(r.cash)}</span></div>
             {r.streamName && <div className="flex justify-between"><span className="text-muted">{r.streamName}</span><span>{compact(r.rivalSubs ?? 0)} subs</span></div>}
             {r.personality && <>
+              {r.boss && <div className="flex justify-between"><span className="text-muted">Studio chief</span><span>{r.boss}</span></div>}
+              {(r.distressUntil ?? -1) > s.t && <div className="flex justify-between"><span className="text-muted">Status</span><Link href="/rights" className="text-amber-300 hover:underline">In trouble: selling cheap</Link></div>}
+              <div className="flex justify-between"><span className="text-muted">Franchises</span><span>{s.franchises.filter((x) => x.studioId === r.id).map((x) => x.name).join(', ') || '—'}</span></div>
               <div className="flex justify-between"><span className="text-muted">Films per year</span><span>~{r.personality.slate}</span></div>
               <div className="flex justify-between"><span className="text-muted">Style</span><span>{r.personality.prestige > 0.6 ? 'Prestige' : r.personality.prestige < 0.35 ? 'Commercial' : 'Balanced'} · {r.personality.risk > 0.65 ? 'risk-taker' : 'cautious'}{r.personality.streamingFirst > 0.5 ? ' · streaming-first' : ''}</span></div>
               <div><div className="label mb-1 mt-2">Loves</div><div className="flex flex-wrap gap-1">{prefs.map(([g]) => <Badge key={g} color={GENRE_COLORS[g as Genre]}>{g}</Badge>)}</div></div>

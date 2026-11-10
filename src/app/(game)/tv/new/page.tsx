@@ -1,5 +1,5 @@
 'use client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useGame } from '@/store/game';
 import { dealBlock, dealFeeMult, dealFor } from '@/lib/engine/deals';
@@ -19,17 +19,22 @@ import { Avatar, OvrBadge } from '@/components/cards';
 export default function NewSeries() {
   const { state: s, act } = useGame();
   const router = useRouter();
+  // Spin-offs arrive with ?from=<film or series id>.
+  const fromId = useSearchParams().get('from') ?? '';
+  const srcFilm = s?.films.find((f) => f.id === fromId && f.studioId === s.studio.id);
+  const srcSeries = (s?.series ?? []).find((x) => x.id === fromId && x.studioId === s?.studio.id);
+  const src = srcFilm ?? srcSeries;
   const [format, setFormat] = useState<SeriesFormat>('Drama');
-  const [g, setG] = useState<Genre>('Crime');
-  const [g2, setG2] = useState<Genre | ''>('');
+  const [g, setG] = useState<Genre>(src?.primaryGenre ?? 'Crime');
+  const [g2, setG2] = useState<Genre | ''>(src?.secondaryGenre ?? '');
   const [tone, setTone] = useState<Tone>('balanced');
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState(src?.language ?? 'en');
   const [episodes, setEpisodes] = useState(FORMAT_INFO.Drama.lengths[2]);
   const [runtime, setRuntime] = useState<30 | 45 | 60>(60);
   const [budgetMult, setBudgetMult] = useState(1);
   const [roll, setRoll] = useState(0);
   const [premiseIdx, setPremiseIdx] = useState(0);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(srcFilm ? `${srcFilm.title}: The Series` : srcSeries ? `${srcSeries.title}: Origins` : '');
   const [writerId, setWriterId] = useState('');
   const [turns, setTurns] = useState(2);
   const [q, setQ] = useState('');
@@ -63,13 +68,13 @@ export default function NewSeries() {
   };
 
   const go = () => {
-    const x = act((d) => developSeries(d, { title: title || suggestedTitle, logline: premises[premiseIdx], format, genre: g, genre2: g2 || undefined, tone, language, episodes, runtime, budgetPerEp, writerId, turns }));
+    const x = act((d) => developSeries(d, { title: title || suggestedTitle, logline: premises[premiseIdx], format, genre: g, genre2: g2 || undefined, tone, language, episodes, runtime, budgetPerEp, writerId, turns, spinoffOf: src?.id }));
     if (x) router.push(`/tv/${x.id}`);
   };
 
   return (
     <div>
-      <PageHeader title="Develop a series" sub="Pick a format, write a pilot, then package and pitch it." />
+      <PageHeader title={src ? `Spin-off: ${src.title}` : 'Develop a series'} sub={src ? 'A series built on a hit you own. It starts with the original’s audience and joins its franchise.' : 'Pick a format, write a pilot, then package and pitch it.'} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel title="1. The show">
           <div className="space-y-4">

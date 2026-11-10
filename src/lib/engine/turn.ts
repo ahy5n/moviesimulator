@@ -19,6 +19,12 @@ import { advanceDeals } from './deals';
 import { advanceFacilities } from './facilities';
 import { advanceMerch } from './merch';
 import { advanceShocks } from './shocks';
+import { advanceRights } from './rights';
+import { advanceTracking } from './marketing';
+import { advanceAgencies } from './agencies';
+import { relationshipEvents } from './relationships';
+import { advanceIndustry } from './industry';
+import { checkAchievements, checkScenario } from './goals';
 
 export function advanceTurn(prev: GameState): GameState {
   const s: GameState = structuredClone(prev);
@@ -44,6 +50,10 @@ export function advanceTurn(prev: GameState): GameState {
     advanceFacilities(s);
     advanceDeals(s);
     advanceMerch(s);
+    advanceRights(s);
+    advanceAgencies(s);
+    relationshipEvents(s);
+    advanceIndustry(s);
     talentEvents(s);
     studioEvents(s);
     decayFranchises(s);
@@ -59,6 +69,9 @@ export function advanceTurn(prev: GameState): GameState {
     refreshMarketplace(s);
     checkBankruptcy(s);
     checkSacking(s);
+    advanceTracking(s);
+    checkScenario(s);
+    checkAchievements(s);
   } finally {
     setTally(null);
   }

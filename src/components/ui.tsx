@@ -17,7 +17,7 @@ export function PageHeader({ title, sub, right }: { title: string; sub?: ReactNo
 
 export function Panel({ title, right, children, className = '', pad = true }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; pad?: boolean }) {
   return (
-    <section className={`panel ${className}`}>
+    <section className={`panel min-w-0 ${className}`}>
       {(title || right) && (
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
           <h2 className="font-marquee text-lg tracking-wider text-gold">{title}</h2>

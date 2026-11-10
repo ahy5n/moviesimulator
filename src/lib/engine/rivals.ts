@@ -11,6 +11,7 @@ import { writersStrike } from './shocks';
 import { computeQuality, greenlight } from './production';
 import { budgetFor, genScript } from './scripts';
 import { salePrice } from './boxoffice';
+import { maybeRivalSequel } from './rights';
 import { STREAMER_BUYERS } from '@/data/studios';
 import { msg, nextId, spend } from './util';
 
@@ -106,6 +107,7 @@ export function startRivalProject(s: GameState, st: Studio, r: RNG): Film | unde
     weekly: [], byMarket: {}, gross: 0, studioRevenue: 0, otherRevenue: 0, spent: 0, backendPaid: 0,
     awards: [], fyc: {}, events: [], luck: 1, buzz: 0, inTheatres: false, weeksOut: 0,
   };
+  if (tier === 'High' || tier === 'Tentpole') maybeRivalSequel(s, st, f, r);
   spend(s, f, script.price, 'Scripts');
   s.films.push(f);
   return f;

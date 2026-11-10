@@ -16,7 +16,16 @@ const MAX_RIVAL_DEALS = 3;
 
 export const dealsList = (s: GameState) => (s.deals ??= []);
 export const dealFor = (s: GameState, talentId: string) => (s.deals ?? []).find((d) => d.talentId === talentId && d.fromT <= s.t && s.t < d.untilT);
-export const canHaveDeal = (t: Talent) => t.kind === 'director' || t.kind === 'writer';
+export const canHaveDeal = (t: Talent) => t.kind === 'director' || t.kind === 'writer' || t.kind === 'actor';
+const pitches = (t: Talent) => t.kind === 'director' || t.kind === 'writer';
+
+/** Actors sign multi-picture and exclusive deals; directors and writers sign first-look and overall deals. */
+export function dealLabel(kind: DealKind, t?: Talent): { name: string; blurb: string } {
+  if (t?.kind !== 'actor') return DEAL_INFO[kind];
+  return kind === 'overall'
+    ? { name: 'Exclusive deal', blurb: 'They only act for you (film and TV), at 30% off. Rivals can’t touch them.' }
+    : { name: 'Multi-picture deal', blurb: 'You get 15% off and first call on them. They can still work elsewhere.' };
+}
 
 /** Fee multiplier for a studio hiring this person: cheaper under your own deal, dearer under a rival's first-look. */
 export function dealFeeMult(s: GameState, talentId: string, studioId: string): number {
@@ -33,7 +42,7 @@ export function dealBlock(s: GameState, talentId: string, studioId: string): str
   return `Exclusive to ${studioById(s, d.studioId)?.name ?? 'another studio'} on an overall deal until ${formatDate(d.untilT)}.`;
 }
 
-export const retainerPerTurn = (t: Talent, kind: DealKind) => Math.round((t.fee * DEAL_INFO[kind].retainer) / 26 / 1000) * 1000;
+export const retainerPerTurn = (t: Talent, kind: DealKind) => Math.round((t.fee * DEAL_INFO[kind].retainer * (t.kind === 'actor' ? 0.55 : 1)) / 26 / 1000) * 1000;
 
 /** Would they sign with you? Prestige, history together and your reputation all help. */
 export function dealWillingness(s: GameState, t: Talent, kind: DealKind): { ok: boolean; score: number; reason: string } {
@@ -49,7 +58,7 @@ export function dealWillingness(s: GameState, t: Talent, kind: DealKind): { ok: 
 
 export function signDeal(s: GameState, talentId: string, kind: DealKind, years: number): string | null {
   const t = talent(s, talentId);
-  if (!t || !canHaveDeal(t)) return 'Only directors and writers sign overall deals.';
+  if (!t || !canHaveDeal(t)) return 'Only actors, directors and writers sign deals.';
   const cur = dealFor(s, talentId);
   if (cur && cur.studioId !== s.studio.id) return `Already on a deal with ${studioById(s, cur.studioId)?.name}.`;
   const w = dealWillingness(s, t, kind);
@@ -60,10 +69,10 @@ export function signDeal(s: GameState, talentId: string, kind: DealKind, years: 
   if (cur) {
     cur.kind = kind; cur.perTurn = per; cur.untilT = Math.max(cur.untilT, s.t) + years * 26; cur.poach = undefined;
   } else {
-    dealsList(s).push({ id: nextId(s, 'dl'), talentId, studioId: s.studio.id, kind, fromT: s.t, untilT: s.t + years * 26, perTurn: per, nextPitchT: s.t + r.int(...DEAL_INFO[kind].pitchEvery) });
+    dealsList(s).push({ id: nextId(s, 'dl'), talentId, studioId: s.studio.id, kind, fromT: s.t, untilT: s.t + years * 26, perTurn: per, nextPitchT: pitches(t) ? s.t + r.int(...DEAL_INFO[kind].pitchEvery) : 1e9 });
   }
   addLoyalty(s, talentId, s.studio.id, 1);
-  headline(`${t.name} signs a ${DEAL_INFO[kind].name.toLowerCase()}`);
+  headline(`${t.name} signs a ${dealLabel(kind, t).name.toLowerCase()}`);
   return null;
 }
 
@@ -117,11 +126,11 @@ export function advanceDeals(s: GameState) {
     const mine = d.studioId === s.studio.id;
     pay(s, d.studioId, -d.perTurn, 'Overall deals');
     if (!mine) continue;
-    if (s.t >= d.nextPitchT) {
+    if (s.t >= d.nextPitchT && pitches(t)) {
       pitchProject(s, d, t, r);
       d.nextPitchT = s.t + r.int(...DEAL_INFO[d.kind].pitchEvery);
     }
-    if (d.untilT - s.t === 3) msg(s, 'agent', `${t.name}'s deal is up soon`, `Their ${DEAL_INFO[d.kind].name.toLowerCase()} ends ${formatDate(d.untilT)}. Renew it on the Studio Lot or rivals will come calling.`, { link: '/lot' });
+    if (d.untilT - s.t === 3) msg(s, 'agent', `${t.name}'s deal is up soon`, `Their ${dealLabel(d.kind, t).name.toLowerCase()} ends ${formatDate(d.untilT)}. Renew it on the Studio Lot or rivals will come calling.`, { link: '/lot' });
     // Rivals try to poach good people who aren't attached to you.
     if (d.poach && d.poach.expires <= s.t) {
       const rival = studioById(s, d.poach.studioId);
@@ -159,11 +168,12 @@ export function advanceDeals(s: GameState) {
     const all = getDB().all;
     for (let i = 0; i < 25; i++) {
       const b = all[Math.floor(r() * all.length)];
-      if (!b || (b.kind !== 'director' && b.kind !== 'writer') || b.attrs.overall < 70 || dealFor(s, b.id) || !isAvailable(s, b.id)) continue;
+      const star = b?.kind === 'actor' && b.attrs.starPower >= 78 && r.chance(0.5);
+      if (!b || (!star && b.kind !== 'director' && b.kind !== 'writer') || b.attrs.overall < 70 || dealFor(s, b.id) || !isAvailable(s, b.id)) continue;
       const t = talent(s, b.id)!;
       if (loyaltyTo(s, t.id, s.studio.id).total >= 6) continue; // your loyal collaborators won't leave you
       rivalSign(s, st.id, t, r.int(2, 4), r);
-      msg(s, 'rival', `${st.name} sign ${t.name}`, `An overall deal for the ${t.kind}.`, { link: `/talent/${t.id}` });
+      msg(s, 'rival', `${st.name} sign ${t.name}`, t.kind === 'actor' ? 'A multi-picture deal for the star.' : `An overall deal for the ${t.kind}.`, { link: `/talent/${t.id}`, read: t.attrs.starPower < 85 });
       break;
     }
   }

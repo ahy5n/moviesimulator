@@ -9,6 +9,7 @@ import { GENRES, type BudgetTier, type Film, type Franchise, type GameState, typ
 import { filmById, msg, nextId, pay, filmProfit } from './util';
 import { dealBlock, dealFeeMult } from './deals';
 import { writersStrike } from './shocks';
+import { movieBuzzFromSeries } from './spinoffs';
 
 const COMBOS: [Genre, Genre][] = [
   ['Action', 'Comedy'], ['Sci-Fi', 'Horror'], ['Romance', 'Comedy'], ['Crime', 'Thriller'], ['Action', 'Sci-Fi'],
@@ -119,7 +120,7 @@ export function buyScript(s: GameState, scriptId: string, studioId = s.studio.id
 /** Build Your Own: hire a writer for N turns; quality is fixed when the draft is delivered. */
 export function commissionScript(s: GameState, o: {
   genre: Genre; genre2?: Genre; tone: Tone; tier: BudgetTier; premise: string; writerId: string; turns: number; title?: string; language?: string;
-  ipId?: string; sequelOf?: string; franchiseId?: string;
+  ipId?: string; sequelOf?: string; franchiseId?: string; spinoffSeries?: string;
 }): Film | undefined {
   const w = talent(s, o.writerId);
   if (!w || writersStrike(s) || dealBlock(s, w.id, s.studio.id)) return;
@@ -147,6 +148,20 @@ export function commissionScript(s: GameState, o: {
   if (o.ipId) {
     const ip = s.ips.find((x) => x.id === o.ipId);
     if (ip) { ip.used = true; f.ipBuzz = ip.buzz; }
+  }
+  if (o.spinoffSeries) {
+    const x = (s.series ?? []).find((y) => y.id === o.spinoffSeries && y.studioId === s.studio.id);
+    if (x) {
+      f.spinoffOf = x.id;
+      f.ipBuzz = movieBuzzFromSeries(x);
+      f.events.push(`Based on the series ${x.title}.`);
+      if (x.franchiseId && !o.franchiseId) o = { ...o, franchiseId: x.franchiseId };
+    }
+  }
+  if (o.franchiseId && !o.sequelOf) {
+    // The next instalment of a franchise you own (including ones bought from rivals).
+    const fr = s.franchises.find((x) => x.id === o.franchiseId && x.studioId === s.studio.id);
+    if (fr) { f.franchiseId = fr.id; fr.filmIds.push(f.id); f.ipBuzz = Math.max(f.ipBuzz ?? 0, Math.round(25 + Math.min(1, fr.heat) * 45)); }
   }
   if (o.sequelOf) {
     const orig = s.films.find((x) => x.id === o.sequelOf);

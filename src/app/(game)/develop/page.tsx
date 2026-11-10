@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { LANGUAGE_CODES, langName } from '@/lib/languages';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useGame } from '@/store/game';
 import { dealBlock, dealFeeMult, dealFor } from '@/lib/engine/deals';
@@ -19,14 +19,17 @@ import { Avatar, OvrBadge } from '@/components/cards';
 export default function Develop() {
   const { state: s, act } = useGame();
   const router = useRouter();
-  const [g, setG] = useState<Genre>('Thriller');
-  const [g2, setG2] = useState<Genre | ''>('');
+  // "Make the movie" from a series arrives with ?fromSeries=<id>.
+  const fromSeries = useSearchParams().get('fromSeries') ?? '';
+  const src = (s?.series ?? []).find((x) => x.id === fromSeries && x.studioId === s?.studio.id);
+  const [g, setG] = useState<Genre>(src?.primaryGenre ?? 'Thriller');
+  const [g2, setG2] = useState<Genre | ''>(src?.secondaryGenre ?? '');
   const [tone, setTone] = useState<Tone>('balanced');
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState(src?.language ?? 'en');
   const [tier, setTier] = useState<BudgetTier>('Mid');
   const [roll, setRoll] = useState(0);
   const [premiseIdx, setPremiseIdx] = useState(0);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(src ? `${src.title}: The Movie` : '');
   const [writerId, setWriterId] = useState('');
   const [turns, setTurns] = useState(2);
   const [q, setQ] = useState('');
@@ -45,13 +48,13 @@ export default function Develop() {
   const strike = writersStrike(s);
 
   const go = () => {
-    const f = act((d) => commissionScript(d, { genre: g, genre2: g2 || undefined, tone, tier, premise: premises[premiseIdx], writerId, turns, title: title || suggestedTitle, language }));
+    const f = act((d) => commissionScript(d, { genre: g, genre2: g2 || undefined, tone, tier, premise: premises[premiseIdx], writerId, turns, title: title || suggestedTitle, language, spinoffSeries: src?.id }));
     if (f) router.push(`/film/${f.id}`);
   };
 
   return (
     <div>
-      <PageHeader title="Development Studio" sub="Build your own film from the ground up." />
+      <PageHeader title={src ? `The movie: ${src.title}` : 'Development Studio'} sub={src ? 'A feature film from your series. Its viewers turn up like a book adaptation’s readers.' : 'Build your own film from the ground up.'} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel title="1. The idea">
           <div className="space-y-4">

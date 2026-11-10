@@ -92,11 +92,14 @@ export function setBoardTargets(s: GameState) {
   const r = makeRng(s.seed, year, 'board');
   const scale = START_CASH[s.settings.startBudget];
   const prev = s.history.at(-1);
-  const profitTarget = Math.round(Math.max(scale * 0.04, (prev?.profit ?? 0) * 0.8 + scale * 0.03) / 1e6) * 1e6;
+  // The board expects growth: beat last year's profit, not just match it.
+  const profitTarget = Math.round(Math.max(scale * 0.06, (prev?.profit ?? 0) * 1.05 + scale * 0.02) / 1e6) * 1e6;
+  const hits = s.settings.startBudget === 'indie' ? 1 : s.settings.startBudget === 'minimajor' ? 2 : 3;
+  const top = s.settings.startBudget === 'major' ? 3 : s.settings.startBudget === 'minimajor' ? 6 : 10;
   const options: BoardTarget[] = [
     { kind: 'profit', value: profitTarget, label: `Profit of $${Math.round(profitTarget / 1e6)}M` },
-    { kind: 'hits', value: s.settings.startBudget === 'indie' ? 1 : 2, label: `At least ${s.settings.startBudget === 'indie' ? 1 : 2} hit${s.settings.startBudget === 'indie' ? '' : 's'} (2.5× return)` },
-    { kind: 'marketShare', value: s.settings.startBudget === 'major' ? 5 : s.settings.startBudget === 'minimajor' ? 9 : 13, label: `Top ${s.settings.startBudget === 'major' ? 5 : s.settings.startBudget === 'minimajor' ? 9 : 13} in market share` },
+    { kind: 'hits', value: hits, label: `At least ${hits} hit${hits > 1 ? 's' : ''} (2.5× return)` },
+    { kind: 'marketShare', value: top, label: `Top ${top} in market share` },
   ];
   if (s.studio.prestige >= 50 || year > 2026) options.push({ kind: 'bpNoms', value: s.studio.prestige >= 65 ? 2 : 1, label: `At least ${s.studio.prestige >= 65 ? 2 : 1} Academy nomination${s.studio.prestige >= 65 ? 's' : ''}` });
   if (s.studio.streaming) {
@@ -112,7 +115,7 @@ export function setBoardTargets(s: GameState) {
 export function evaluateTarget(s: GameState, t: BoardTarget, year: number): boolean {
   switch (t.kind) {
     case 'profit': return yearProfit(s, year) >= t.value;
-    case 'hits': return s.films.filter((f) => f.studioId === s.studio.id && f.release && yearOf(f.release.t) === year && f.gross > 2.5 * f.spent && f.gross > 0).length >= t.value;
+    case 'hits': return s.films.filter((f) => f.studioId === s.studio.id && !f.boughtFrom && f.release && yearOf(f.release.t) === year && f.gross > 2.5 * f.spent && f.gross > 0).length >= t.value;
     case 'marketShare': return marketShares(s, year).findIndex((x) => x.studio.id === s.studio.id) < t.value;
     case 'bpNoms': {
       const noms = s.films.filter((f) => f.studioId === s.studio.id).flatMap((f) => f.awards).filter((a) => a.body === 'academy' && a.year === year - 1).length;
@@ -132,7 +135,8 @@ export function boardYearEnd(s: GameState) {
     if (t.met) met++;
   }
   const shocked = (s.shocks ?? []).some((x) => x.startT < s.t && x.endT > s.t - 26) || !!activeShock(s);
-  const delta = met * 9 - (b.targets.length - met) * 11 * boardSoftening(s) * (shocked ? 0.75 : 1);
+  // Boards get restless: a flat year costs a little confidence even before targets.
+  const delta = met * 7 - (b.targets.length - met) * 13 * boardSoftening(s) * (shocked ? 0.75 : 1) - 3;
   b.confidence = clamp(b.confidence + delta);
   addBoardLoyalty(s, met * BOARD_LOYALTY.target);
   b.history.push({ year, confidence: b.confidence, met, total: b.targets.length });

@@ -12,7 +12,7 @@ import type { BudgetTier, Genre, GameState } from '@/lib/types';
 import { Badge, Bar, Button, Empty, Field, Modal, PageHeader, Panel } from '@/components/ui';
 import { MerchBlock } from '@/components/MerchBlock';
 
-type Dev = { kind: 'ip'; id: string; g: Genre; g2?: Genre; title: string } | { kind: 'sequel'; id: string; g: Genre; g2?: Genre; title: string };
+type Dev = { kind: 'ip' | 'sequel' | 'franchise'; id: string; g: Genre; g2?: Genre; title: string };
 
 function bestWriters(s: GameState, g: Genre, g2?: Genre) {
   return allTalent(s, 'writer').filter((w) => isAvailable(s, w.id))
@@ -42,8 +42,8 @@ export default function IPPage() {
     if (!w) return;
     const f = act((d) => commissionScript(d, {
       genre: dev.g, genre2: dev.g2, tone: 'balanced', tier, writerId: w.id, turns: 2, title: dev.title,
-      premise: dev.kind === 'ip' ? `Based on the hit ${d.ips.find((x) => x.id === dev.id)?.kind.toLowerCase()}.` : 'The story continues.',
-      ipId: dev.kind === 'ip' ? dev.id : undefined, sequelOf: dev.kind === 'sequel' ? dev.id : undefined,
+      premise: dev.kind === 'ip' ? `Based on the hit ${d.ips.find((x) => x.id === dev.id)?.kind.toLowerCase()}.` : dev.kind === 'franchise' ? 'The next chapter.' : 'The story continues.',
+      ipId: dev.kind === 'ip' ? dev.id : undefined, sequelOf: dev.kind === 'sequel' ? dev.id : undefined, franchiseId: dev.kind === 'franchise' ? dev.id : undefined,
     }));
     setDev(null);
     if (f) router.push(`/film/${f.id}`);
@@ -110,6 +110,10 @@ export default function IPPage() {
                     {linkable.filter((f) => !fr.filmIds.includes(f.id)).map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
                   </select>
                 )}
+                <Button size="sm" variant="ghost" className="mt-2" onClick={() => {
+                  const first = fr.filmIds.map((id) => s.films.find((x) => x.id === id)).find(Boolean);
+                  setDev({ kind: 'franchise', id: fr.id, g: fr.genre ?? first?.primaryGenre ?? 'Action', g2: first?.secondaryGenre, title: `${fr.name} ${(fr.legacyFilms ?? 0) + fr.filmIds.length + 1}` });
+                }}>Develop next instalment</Button>
                 <MerchBlock fr={fr} />
               </div>
             ))}

@@ -6,7 +6,7 @@ import { formatDate, formatShort } from '@/lib/calendar';
 import { money } from '@/lib/format';
 import { talent } from '@/lib/talentDb';
 import { FACILITIES, buildFacility, facilityLevel, upkeepPerTurn } from '@/lib/engine/facilities';
-import { DEAL_INFO, endDeal, matchPoach } from '@/lib/engine/deals';
+import { dealLabel, endDeal, matchPoach } from '@/lib/engine/deals';
 import { studioById } from '@/lib/engine/util';
 import { Button, Empty, PageHeader, Panel } from '@/components/ui';
 
@@ -67,7 +67,7 @@ export default function StudioLot() {
                 return (
                   <div key={d.id} className="p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <div><Link href={`/talent/${t.id}`} className="font-medium hover:text-gold">{t.name}</Link> <span className="text-xs capitalize text-muted">{t.kind} · {DEAL_INFO[d.kind].name} · to {formatShort(d.untilT)}</span></div>
+                      <div><Link href={`/talent/${t.id}`} className="font-medium hover:text-gold">{t.name}</Link> <span className="text-xs capitalize text-muted">{t.kind} · {dealLabel(d.kind, t).name} · to {formatShort(d.untilT)}</span></div>
                       <div className="flex gap-1.5">
                         <Link href={`/talent/${t.id}`} className="rounded-lg border border-line px-2 py-1 text-xs hover:border-gold">Renew</Link>
                         <Button size="sm" variant="ghost" onClick={() => { if (confirm(`End ${t.name}'s deal? Buying out the rest of the term costs ${money(Math.max(0, d.untilT - s.t) * d.perTurn * 0.25)}.`)) act((x) => endDeal(x, d.id)); }}>End</Button>
@@ -88,7 +88,7 @@ export default function StudioLot() {
         </Panel>
         <Panel title="Locked up by rivals" pad={false}>
           {theirs.length ? (
-            <div className="max-h-[420px] overflow-y-auto"><table className="tbl">
+            <div className="max-h-[420px] overflow-auto"><table className="tbl">
               <thead><tr><th>Who</th><th>Studio</th><th>Deal</th><th className="text-right">Until</th></tr></thead>
               <tbody>{theirs.map((d) => {
                 const t = talent(s, d.talentId);

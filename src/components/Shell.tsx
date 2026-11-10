@@ -19,10 +19,10 @@ const NAV: { group: string; items: { href: string; label: string; icon: string; 
   ] },
   { group: 'Development', items: [
     { href: '/scripts', label: 'Script Market', icon: '✎' }, { href: '/develop', label: 'Development', icon: '✍' },
-    { href: '/ip', label: 'IP & Franchises', icon: '❖' },
+    { href: '/ip', label: 'IP & Franchises', icon: '❖' }, { href: '/rights', label: 'Rights Market', icon: '⇄' },
   ] },
   { group: 'Talent & Production', items: [
-    { href: '/talent', label: 'Talent', icon: '☺' }, { href: '/slate', label: 'Production Slate', icon: '▤' },
+    { href: '/talent', label: 'Talent', icon: '☺' }, { href: '/agencies', label: 'Agencies', icon: '☎' }, { href: '/slate', label: 'Production Slate', icon: '▤' },
     { href: '/tv', label: 'TV Studio', icon: '📺' },
     { href: '/release', label: 'Release Planner', icon: '▶' },
   ] },

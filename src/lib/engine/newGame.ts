@@ -4,14 +4,18 @@ import { makeRng, clamp } from '../rng';
 import { GENRES, type GameSettings, type GameState, type Genre } from '../types';
 import { newBoard, setBoardTargets } from './finance';
 import { seedRivals } from './rivals';
+import { seedRivalFranchises } from './rights';
 import { refreshIPs, refreshMarketplace } from './scripts';
 import { msg } from './util';
+import { scenarioDef, startScenario } from './goals';
 
 export type NewGameOptions = GameSettings & {
-  name: string; color: string; initials: string; hq: string; seed?: string; slot?: string;
+  name: string; color: string; initials: string; hq: string; seed?: string; slot?: string; scenario?: string;
 };
 
-export function newGame(o: NewGameOptions): GameState {
+export function newGame(opts: NewGameOptions): GameState {
+  const def = scenarioDef(opts.scenario);
+  const o = def ? { ...opts, ...def.setup } : opts;
   const seed = o.seed || Math.random().toString(36).slice(2, 10);
   const r = makeRng(seed, 'init');
   const heat = {} as Record<Genre, number>;
@@ -32,6 +36,7 @@ export function newGame(o: NewGameOptions): GameState {
     bailoutUsed: false, jobHistory: [{ studioName: o.name, fromT: 0 }], producer: { reputation: 0 }, idCounter: 1, stats: { biddingWars: 0, sacked: 0 },
   };
   if (o.difficulty === 'hard') s.board = newBoard(s);
+  seedRivalFranchises(s);
   seedRivals(s);
   refreshMarketplace(s);
   refreshIPs(s);
@@ -42,6 +47,12 @@ export function newGame(o: NewGameOptions): GameState {
     '3. Greenlight, shoot, and release it in the best window you can find.',
     'Advance the calendar a fortnight at a time. Good luck.',
   ].join('\n'), { link: '/scripts' });
+  if (def) {
+    if (def.setup.cash !== undefined) s.studio.cash = def.setup.cash;
+    if (def.setup.prestige !== undefined) s.studio.prestige = def.setup.prestige;
+    if (def.setup.loan) s.loans.push({ id: 'l0', principal: def.setup.loan, balance: def.setup.loan, rate: 0.1, payment: def.setup.loan * 0.1 / 26 / (1 - Math.pow(1 + 0.1 / 26, -78)), turnsLeft: 78 });
+    startScenario(s, def.id);
+  }
   if (s.board) setBoardTargets(s);
   return s;
 }

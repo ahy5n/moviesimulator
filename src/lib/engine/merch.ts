@@ -20,7 +20,7 @@ export const LICENCES: Record<LicenceKind, { name: string; blurb: string; cost: 
 export function franchiseFilms(s: GameState, fr: Franchise): Film[] {
   return fr.filmIds.map((id) => s.films.find((f) => f.id === id)).filter((f): f is Film => !!f && !!f.release && f.release.t <= s.t);
 }
-export const franchiseGross = (s: GameState, fr: Franchise) => franchiseFilms(s, fr).reduce((a, f) => a + f.gross, 0);
+export const franchiseGross = (s: GameState, fr: Franchise) => (fr.legacyGross ?? 0) + franchiseFilms(s, fr).reduce((a, f) => a + f.gross, 0);
 
 function mainGenre(films: Film[]): Genre {
   const w = new Map<Genre, number>();
@@ -33,11 +33,11 @@ const hasLive = (fr: Franchise, k: LicenceKind) => !!fr.licences?.some((l) => l.
 /** Yearly merch royalties a franchise is earning right now. */
 export function merchPerYear(s: GameState, fr: Franchise): number {
   const films = franchiseFilms(s, fr);
-  if (!films.length) return 0;
-  const gross = films.reduce((a, f) => a + f.gross, 0);
-  const last = Math.max(...films.map((f) => f.release!.t));
+  if (!films.length && !fr.legacyGross) return 0;
+  const gross = franchiseGross(s, fr);
+  const last = Math.max(-26, ...films.map((f) => f.release!.t)); // legacy films: last one came out in 2025
   const years = (s.t - last) / 26;
-  return gross * merchRate(mainGenre(films)) * (0.3 + Math.min(1.2, fr.heat)) * Math.pow(0.85, years) * (hasLive(fr, 'toys') ? 1.6 : 1);
+  return gross * merchRate(fr.genre ?? mainGenre(films)) * (0.3 + Math.min(1.2, fr.heat)) * Math.pow(0.85, years) * (hasLive(fr, 'toys') ? 1.6 : 1);
 }
 export const parkPerYear = (s: GameState, fr: Franchise) => (hasLive(fr, 'park') ? franchiseGross(s, fr) * 0.05 * (0.5 + Math.min(1.2, fr.heat)) : 0);
 

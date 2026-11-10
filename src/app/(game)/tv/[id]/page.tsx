@@ -6,16 +6,18 @@ import { Bar as RBar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Toolti
 import { useGame } from '@/store/game';
 import { channelById } from '@/data/channels';
 import { GENRE_COLORS } from '@/lib/constants';
-import { money } from '@/lib/format';
+import { compact, money } from '@/lib/format';
 import { langName } from '@/lib/languages';
 import { allTalent, genreFit, isAvailable, talent } from '@/lib/talentDb';
 import {
   acceptOffer, airingTurns, approachRegular, askingPerEp, canApproachRegular, dropRegular, endSeries, expectation, filmingTurns,
-  keepOnOwnService, pitch, postTurns, readyToPitch, seasonCost, seriesById, seriesProfit, seriesQuality, seriesStageLabel, startIssues, startSeason,
+  keepOnOwnService, pitch, postTurns, readyToPitch, seasonCost, seriesById, seriesProfit, seriesPull, seriesQuality, seriesStageLabel, startIssues, startSeason,
   type RegularResponse,
 } from '@/lib/engine/tv';
 import type { Series } from '@/lib/types';
-import { Badge, Button, Empty, Field, Panel, Stat } from '@/components/ui';
+import { canMakeMovie, canSpinOffSeries } from '@/lib/engine/spinoffs';
+
+import { Badge, Button, Empty, Field, LinkButton, Panel, Stat } from '@/components/ui';
 import { Avatar, OvrBadge } from '@/components/cards';
 
 const STEPS = ['Pilot', 'Package & pitch', 'Sign a deal', 'Shoot', 'On air', 'Renewal'];
@@ -101,10 +103,19 @@ export default function SeriesPage() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Spent" value={money(x.spent)} />
-        <Stat label="Revenue" value={money(x.revenue)} tone="gold" sub="Licence fees, international, syndication" />
+        <Stat label="Revenue" value={money(x.revenue)} tone="gold" sub={x.ownService ? `Share of ${s.studio.streaming?.name ?? 'service'} revenue it earns` : 'Licence fees, international, syndication'} />
         <Stat label="Profit" value={money(seriesProfit(x))} tone={seriesProfit(x) >= 0 ? 'good' : 'bad'} />
-        <Stat label="Episodes made" value={totalEps} sub={x.syndicated ? 'In syndication' : 'Syndication at 88 (long-running formats)'} />
+        {x.ownService
+          ? <Stat label="Subscriber pull" value={compact(seriesPull(s, x))} sub={x.stage === 'airing' ? 'On air: pulling hardest now' : 'Back catalogue keeps pulling'} />
+          : <Stat label="Episodes made" value={totalEps} sub={x.syndicated ? 'In syndication' : 'Syndication at 88 (long-running formats)'} />}
       </div>
+      {mine && (canSpinOffSeries(s, x) || canMakeMovie(s, x)) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          {canSpinOffSeries(s, x) && <LinkButton href={`/tv/new?from=${x.id}`} size="sm">Develop a spin-off series</LinkButton>}
+          {canMakeMovie(s, x) && <LinkButton href={`/develop?fromSeries=${x.id}`} size="sm">Make the movie</LinkButton>}
+          <span className="text-xs text-muted">Spin-offs inherit the audience{x.franchiseId ? ' and the franchise' : ''}.</span>
+        </div>
+      )}
 
       {/* ---------------- What to do now ---------------- */}
       {mine && (
@@ -123,6 +134,7 @@ export default function SeriesPage() {
                 <Button variant="ticket" disabled={!readyToPitch(x)} onClick={() => act((d) => pitch(d, x.id))}>Pitch to channels</Button>
                 {s.studio.streaming && <Button variant="ghost" onClick={() => act((d) => keepOnOwnService(d, x.id))}>Keep it for {s.studio.streaming.name}</Button>}
               </div>
+              {s.studio.streaming && <p className="text-xs text-muted">Keeping it in-house means no licence fees, but every season brings a wave of sign-ups to {s.studio.streaming.name}, the back catalogue keeps pulling subscribers, and a breakout hit lifts the whole service.</p>}
             </div>
           )}
 
@@ -269,8 +281,8 @@ export default function SeriesPage() {
               <>
                 <div className="h-48"><ResponsiveContainer><BarChart data={seasonChart}><CartesianGrid stroke="#2A2A36" vertical={false} /><XAxis dataKey="s" tick={{ fill: '#8A8A9A', fontSize: 11 }} /><YAxis tick={{ fill: '#8A8A9A', fontSize: 11 }} width={35} unit="M" /><Tooltip {...tip} />
                   <RBar dataKey="viewers" radius={[3, 3, 0, 0]}>{seasonChart.map((d) => <Cell key={d.s} fill={d.outcome === 'cancelled' ? '#F87171' : '#D4AF37'} />)}</RBar></BarChart></ResponsiveContainer></div>
-                <table className="tbl mt-3"><thead><tr><th>Season</th><th className="text-right">Viewers/ep</th><th className="text-right">Critics</th><th className="text-right">Audience</th><th>Result</th></tr></thead><tbody>
-                  {x.seasons.map((r) => <tr key={r.n}><td>S{r.n}</td><td className="text-right">{r.viewers.toFixed(2)}M</td><td className="text-right">{r.critic}</td><td className="text-right">{r.audience}</td><td className="capitalize text-muted">{r.outcome}</td></tr>)}
+                <table className="tbl mt-3"><thead><tr><th>Season</th><th className="text-right">Viewers/ep</th><th className="text-right">Critics</th><th className="text-right">Audience</th>{x.ownService && <th className="text-right">Sub pull</th>}<th>Result</th></tr></thead><tbody>
+                  {x.seasons.map((r) => <tr key={r.n}><td>S{r.n}</td><td className="text-right">{r.viewers.toFixed(2)}M</td><td className="text-right">{r.critic}</td><td className="text-right">{r.audience}</td>{x.ownService && <td className="text-right">{r.pull ? compact(r.pull) : '—'}</td>}<td className="capitalize text-muted">{r.outcome === 'ended' && x.ownService ? 'complete' : r.outcome}</td></tr>)}
                 </tbody></table>
               </>
             ) : <Empty>No seasons aired yet.</Empty>}

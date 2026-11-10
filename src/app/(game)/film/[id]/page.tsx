@@ -14,6 +14,8 @@ import { money } from '@/lib/format';
 import { talent } from '@/lib/talentDb';
 import { greenlight, greenlightIssues, qualityBreakdown, reshootCost, reshoots, setBudget, shelve, testScreening, testScreeningCost } from '@/lib/engine/production';
 import { enterFestival } from '@/lib/engine/awards';
+import { canSpinOffFilm } from '@/lib/engine/spinoffs';
+import { CAMPAIGN } from '@/lib/engine/marketing';
 import { filmById, filmProfit, filmRevenue, isReleased, pay, studioById, totalCost } from '@/lib/engine/util';
 import { MARKETS } from '@/lib/types';
 import { Badge, Button, Empty, Field, LinkButton, Panel, Stat } from '@/components/ui';
@@ -114,6 +116,17 @@ export default function FilmPage() {
               {f.testRange && <span className="chip">Test screening: {f.testRange[0]}–{f.testRange[1]}</span>}
               {f.testRange && !f.events.some((e) => e.startsWith('Reshoots')) && <Button variant="ghost" onClick={() => act((d) => reshoots(d, filmById(d, f.id)!))}>Order reshoots ({money(reshootCost(f))})</Button>}
               {f.stage === 'ready' && <LinkButton href={`/release?film=${f.id}`} variant="gold">{f.release ? `Releases ${formatShort(f.release.t)}` : 'Plan release'}</LinkButton>}
+            </div>
+          )}
+          {f.stage === 'ready' && f.tracking && f.tracking.length > 0 && (
+            <div className="mt-3 text-sm">Opening-week tracking: <span className="font-semibold text-gold">{money(f.tracking.at(-1)!.low)} – {money(f.tracking.at(-1)!.high)}</span>{f.campaign?.length ? <span className="text-xs text-muted"> · campaign: {f.campaign.map((i) => CAMPAIGN[i].name).join(', ')}</span> : null}</div>
+          )}
+          {f.previews !== undefined && f.weekly.length > 0 && <div className="mt-2 text-sm text-muted">Thursday previews {money(f.previews)} · opening week {money(f.weekly[0])}</div>}
+          {f.boughtFrom && <div className="mt-2 text-sm text-muted">Rights bought from {studioById(s, f.boughtFrom)?.name ?? 'a rival'}.</div>}
+          {canSpinOffFilm(s, f) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <LinkButton href={`/tv/new?from=${f.id}`} size="sm">Spin off a TV series</LinkButton>
+              <span className="text-xs text-muted">The film&apos;s fans come with it: the series starts with buzz and joins the franchise.</span>
             </div>
           )}
           {(f.stage === 'post' || f.stage === 'ready') && !f.festival && festOptions.length > 0 && (

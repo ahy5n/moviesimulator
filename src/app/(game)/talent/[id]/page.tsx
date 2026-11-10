@@ -14,6 +14,8 @@ import { GENRES, MARKETS } from '@/lib/types';
 import { Badge, Bar, Empty, Panel } from '@/components/ui';
 import { Avatar, OvrBadge } from '@/components/cards';
 import { DealPanel } from '@/components/DealPanel';
+import { agencyName, agencyOf, agencyRel, blacklisted } from '@/lib/engine/agencies';
+import { FEUD_AT, FRIENDS_AT, relationsOf } from '@/lib/engine/relationships';
 
 export default function TalentProfile() {
   const s = useGame((x) => x.state)!;
@@ -39,7 +41,7 @@ export default function TalentProfile() {
         <div className="min-w-0 flex-1">
           <h1 className="h-display text-3xl font-bold">{t.name}</h1>
           <div className="mt-1 text-sm text-muted">{flag(t.nationality)} {countryName(t.nationality)} · Age {ageAt(t.birthDate, s.t)} · <span className="capitalize">{t.kind === 'actor' ? (t.gender === 'F' ? 'actress' : 'actor') : t.kind}</span>{t.isFictional ? ' · fictional' : ''}{ov?.retired ? ' · retired' : ''}</div>
-          <div className="mt-1 text-sm">Speaks {(t.languages ?? []).map(langName).join(', ') || '—'}</div>
+          <div className="mt-1 text-sm">Speaks {(t.languages ?? []).map(langName).join(', ') || '—'} · Repped by <Link href="/agencies" className="link">{agencyName(agencyOf(t))}</Link>{blacklisted(s, agencyOf(t)) ? <span className="text-red-300"> (frozen you out)</span> : agencyRel(s, agencyOf(t)) >= 4 ? <span className="text-emerald-300"> (friendly)</span> : null}</div>
           <div className="mt-2 flex flex-wrap gap-1.5">{t.traits.map((tr) => <span key={tr} className="chip" title={TRAIT_INFO[tr]}>{tr}</span>)}</div>
         </div>
         <div className="text-right">
@@ -101,6 +103,22 @@ export default function TalentProfile() {
             );
           })()}
           <DealPanel t={t} />
+          {(() => {
+            const rel = relationsOf(s, t.id).filter((x) => x.v >= FRIENDS_AT || x.v <= FEUD_AT).slice(0, 8);
+            if (!rel.length) return null;
+            return (
+              <div className="mt-4 rounded-lg border border-line bg-panel2 p-3 text-sm">
+                <div className="label mb-1">Relationships</div>
+                {rel.map(({ other, v }) => (
+                  <div key={other.id} className="flex justify-between">
+                    <Link href={`/talent/${other.id}`} className="hover:text-gold">{other.name} <span className="text-xs capitalize text-muted">{other.kind}</span></Link>
+                    <span className={v > 0 ? 'text-emerald-300' : 'text-red-300'}>{v >= 6 ? 'Best friends' : v > 0 ? 'Friends' : 'Won’t work together'}</span>
+                  </div>
+                ))}
+                <div className="mt-1 text-xs text-muted">Friends work cheaper together and lift on-set chemistry.</div>
+              </div>
+            );
+          })()}
         </Panel>
         <Panel title="Filmography" className="lg:col-span-2">
           {inGame.length > 0 && (

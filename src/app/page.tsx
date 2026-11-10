@@ -9,6 +9,7 @@ import { useGame } from '@/store/game';
 import { deleteSave, freeSlot, listSaves, SLOTS, type SlotMeta } from '@/store/saves';
 import { Button, Field } from '@/components/ui';
 import { Loading } from '@/components/Shell';
+import { SCENARIOS, scenarioDef } from '@/lib/engine/goals';
 
 const COLORS = ['#D4AF37', '#C0392B', '#2E86DE', '#16A085', '#8E44AD', '#E67E22', '#ECF0F1', '#E84393'];
 
@@ -21,7 +22,7 @@ export default function Title() {
   const [f, setF] = useState({
     name: 'Meridian Pictures', initials: 'MP', color: COLORS[0], hq: 'LA',
     difficulty: 'easy' as 'easy' | 'hard', crewMode: 'standard' as 'standard' | 'full', startBudget: 'minimajor' as 'indie' | 'minimajor' | 'major',
-    slot: 'slot1', seed: '',
+    slot: 'slot1', seed: '', scenario: '',
   });
 
   useEffect(() => { listSaves().then(setSaves); freeSlot().then((slot) => setF((x) => ({ ...x, slot }))); }, []);
@@ -31,7 +32,7 @@ export default function Title() {
 
   const begin = async () => {
     setLoading(true);
-    await start({ ...f, seed: f.seed || undefined });
+    await start({ ...f, seed: f.seed || undefined, scenario: f.scenario || undefined });
     router.push('/hq');
   };
   const resume = async (slot: string) => {
@@ -91,6 +92,13 @@ export default function Title() {
                 {HQS.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}
               </select>
             </Field>
+            <Field label="Mode" hint={scenarioDef(f.scenario)?.blurb ?? 'Play as long as you like, no set goal.'}>
+              <select className="select w-full" value={f.scenario} onChange={(e) => setF({ ...f, scenario: e.target.value })}>
+                <option value="">Sandbox</option>
+                {SCENARIOS.map((x) => <option key={x.id} value={x.id}>Scenario: {x.name} ({x.years} years)</option>)}
+              </select>
+            </Field>
+            {scenarioDef(f.scenario)?.setup.startBudget && <div className="text-xs text-amber-300">This scenario sets your starting budget{scenarioDef(f.scenario)?.setup.difficulty ? ' and difficulty' : ''}.</div>}
             <Choice label="Difficulty" value={f.difficulty} onChange={(v) => setF({ ...f, difficulty: v })} options={[
               { v: 'easy', t: 'Easy', d: 'Simple finances. No board.' },
               { v: 'hard', t: 'Hard', d: 'Overheads, loans, co-financing and a board that can fire you.' },

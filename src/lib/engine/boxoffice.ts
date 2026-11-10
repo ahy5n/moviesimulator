@@ -5,11 +5,13 @@ import { OUTLETS, CRITICS } from '../names';
 import { languageMarketFactor } from '../languages';
 import { makeRng, clamp } from '../rng';
 import { reviewQuote } from '../titles';
-import { MARKETS, type Film, type GameState, type Market, type ReleaseType, type ScreenPlan, type Studio } from '../types';
+import { MARKETS, type CampaignItem, type Film, type GameState, type Market, type ReleaseType, type ScreenPlan, type Studio } from '../types';
 import { castMembers } from './production';
 import { addLoyalty, LOYALTY } from './loyalty';
 import { franchiseMult, franchiseOf } from './scripts';
 import { boxOfficeShockMult } from './shocks';
+import { campaignMult, runCampaign } from './marketing';
+import { relationsOnResult } from './relationships';
 import { filmProfit, headline, msg, pay, spend, studioById } from './util';
 
 /** How big a given genre can get at the global box office. */
@@ -18,7 +20,7 @@ const GENRE_CEILING: Record<Film['primaryGenre'], number> = {
   Thriller: 0.9, Crime: 0.85, Romance: 0.85, Musical: 0.9, War: 0.85, Drama: 0.75, Western: 0.75, Documentary: 0.4,
 };
 
-export type ReleasePlan = { type: ReleaseType; t: number; screens: ScreenPlan; marketing: number; buyer?: string; price?: number };
+export type ReleasePlan = { type: ReleaseType; t: number; screens: ScreenPlan; marketing: number; buyer?: string; price?: number; campaign?: CampaignItem[] };
 
 const heatOf = (s: GameState, f: Film) => 0.65 * s.genreHeat[f.primaryGenre] + 0.35 * s.genreHeat[f.secondaryGenre ?? f.primaryGenre];
 
@@ -70,7 +72,7 @@ export function expectedOpening(s: GameState, f: Film, plan: { t: number; screen
     * competition(s, f, plan.t) * (0.68 + q / 100 * 0.62) * franchiseMult(s, f)
     * (1 + (f.festival?.reception ?? 0) * 0.15) * (1 + f.buzz * 0.1);
   const g = 0.65 * GENRE_CEILING[f.primaryGenre] + 0.35 * GENRE_CEILING[f.secondaryGenre ?? f.primaryGenre];
-  const common = ti.base * g * Math.pow(boosts, 0.75) * boxOfficeShockMult(s) * Math.pow(SCREENS[plan.screens].mult, ti.screenW) * (plan.type === 'dayanddate' ? 0.6 : 1);
+  const common = ti.base * g * Math.pow(boosts, 0.75) * boxOfficeShockMult(s) * campaignMult(s, f) * Math.pow(SCREENS[plan.screens].mult, ti.screenW) * (plan.type === 'dayanddate' ? 0.6 : 1);
   const out = {} as Record<Market, number>;
   for (const m of MARKETS) out[m] = common * MARKET_SHARE[m] * regionalAppeal(s, f, m) * studioRegion(st, m) * languageMarketFactor(f.language, m);
   return out;
@@ -101,7 +103,7 @@ export function generateReviews(s: GameState, f: Film) {
   const b1 = GENRE_BIAS[f.primaryGenre], b2 = GENRE_BIAS[f.secondaryGenre ?? f.primaryGenre];
   const leads = castMembers(s, f).filter((m) => m.lead);
   const star = leads.length ? leads.reduce((a, m) => a + m.t.attrs.starPower, 0) / leads.length : 50;
-  f.critic = clamp(Math.round(f.quality + 0.65 * b1.critic + 0.35 * b2.critic + r.normal(0, 6)), 1, 99);
+  f.critic = clamp(Math.round(f.quality + 0.65 * b1.critic + 0.35 * b2.critic + r.normal(0, 6) + (f.campaign?.includes('premiere') ? 2 : 0)), 1, 99);
   f.audience = clamp(Math.round(f.quality * 0.72 + 20 + 0.65 * b1.audience + 0.35 * b2.audience + (star - 50) / 12 + r.normal(0, 6)), 5, 99);
   f.qualityKnown = true;
   const outlets = r.shuffle([...OUTLETS]).slice(0, 6);
@@ -131,6 +133,7 @@ export function scheduleRelease(s: GameState, f: Film, plan: ReleasePlan): strin
   f.marketing = plan.type === 'streaming' ? Math.round(plan.marketing * 0.5) : plan.marketing;
   spend(s, f, f.marketing + (plan.screens === 'ultra' ? f.budget * SCREENS.ultra.cost : 0), 'Marketing');
   f.release = { type: plan.type, t: plan.t, screens: plan.screens, markets: [...MARKETS] };
+  if (plan.campaign?.length) runCampaign(s, f, plan.campaign);
   return null;
 }
 
@@ -196,6 +199,10 @@ export function advanceBoxOffice(s: GameState) {
       open = {} as Record<Market, number>;
       for (const m of MARKETS) open[m] = exp[m] * noise * rev * clamp(r.normal(1, 0.1), 0.7, 1.3);
       f.openByMarket = open;
+      if (f.studioId === s.studio.id && f.release.type !== 'streaming') {
+        f.previews = Math.round(Object.values(open).reduce((a, b) => a + b, 0) * 0.11 * r.range(0.85, 1.15));
+        msg(s, 'news', `${f.title}: $${(f.previews / 1e6).toFixed(1)}M from Thursday previews`, 'The weekend number is on its way.', { link: `/film/${f.id}` });
+      }
     }
     let turnRevenue = 0;
     for (let k = 0; k < 2 && f.inTheatres; k++) {
@@ -256,7 +263,8 @@ export function advanceWindows(s: GameState, onLibrary: (f: Film) => void) {
     if (f.release?.type === 'streaming') { onLibrary(f); continue; }
     // Home entertainment + licensing. If the studio has its own service it keeps the film and earns PVOD only.
     const own = !!st.streaming;
-    const amount = f.gross * (own ? 0.1 : 0.3 + q / 100 * 0.14) + (own ? 0 : f.budget * 0.16);
+    const hard = st.isPlayer && s.settings.difficulty === 'hard' ? 0.85 : 1; // buyers squeeze you harder on Hard
+    const amount = (f.gross * (own ? 0.1 : 0.3 + q / 100 * 0.14) + (own ? 0 : f.budget * 0.16)) * hard;
     f.otherRevenue += amount;
     pay(s, f.studioId, amount, own ? 'Home entertainment' : 'Licensing');
     payParticipants(s, f, amount);
@@ -288,6 +296,7 @@ export function judgeResult(s: GameState, f: Film) {
     if (ratio > 3) { s.genreHeat[g] = clamp(s.genreHeat[g] + 0.06, 0.6, 1.4); if (fr) fr.heat += 0.25; }
     else if (ratio < 1.2) { s.genreHeat[g] = clamp(s.genreHeat[g] - 0.06, 0.6, 1.4); if (fr) fr.heat = Math.max(0, fr.heat - 0.2); }
   }
+  relationsOnResult(s, f);
   for (const c of Object.values(f.crew)) if (c) addLoyalty(s, c.talentId, f.studioId, LOYALTY.film);
   for (const c of f.cast) {
     addLoyalty(s, c.talentId, f.studioId, LOYALTY.film);

@@ -53,7 +53,7 @@ function castRegulars(s: GameState, x: Series, r: RNG) {
   for (const role of ['lead', 'support'] as const) {
     for (let i = need(role); i > 0; i--) {
       const cap = role === 'lead' ? Math.max(60_000, x.budgetPerEp * 0.25) : Math.max(20_000, x.budgetPerEp * 0.08);
-      const t = pickPerson(s, r, 'actor', x.language, (c) => (askingPerEp(s, c, x, role) > cap ? -999 : 0.5 * genreFit(c, x.primaryGenre, x.secondaryGenre) + 0.35 * c.attrs.overall + (role === 'lead' ? 0.2 * c.attrs.starPower : 0)), taken);
+      const t = pickPerson(s, r, 'actor', x.language, (c) => (askingPerEp(s, c, x, role) > cap ? -999 : 0.5 * genreFit(c, x.primaryGenre, x.secondaryGenre) + 0.35 * c.attrs.overall + (role === 'lead' ? 0.2 * c.attrs.starPower : 0)), taken, 60, x.studioId);
       if (!t) break;
       taken.add(t.id);
       x.regulars.push({ talentId: t.id, role, feePerEp: askingPerEp(s, t, x, role) });

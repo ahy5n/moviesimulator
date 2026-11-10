@@ -8,6 +8,8 @@ import { myFilms, studioRecords } from '@/lib/selectors';
 import { filmProfit } from '@/lib/engine/util';
 import { talent } from '@/lib/talentDb';
 import { Empty, PageHeader, Panel, Stat } from '@/components/ui';
+import { ACHIEVEMENTS, scenarioDef } from '@/lib/engine/goals';
+import { formatDate } from '@/lib/calendar';
 
 export default function History() {
   const s = useGame((x) => x.state)!;
@@ -27,6 +29,34 @@ export default function History() {
         <Stat label="Awards won" value={wins.length} />
         <Stat label="Academy Best Pictures" value={wins.filter((w) => w.a.body === 'academy' && w.a.category === 'Best Picture').length} tone="gold" />
       </div>
+      {(() => {
+        const sc = s.scenario;
+        const def = scenarioDef(sc?.id);
+        if (!sc || !def) return null;
+        const p = def.progress(s);
+        return (
+          <Panel title={`Scenario: ${def.name}`} className="mt-5">
+            <p className="text-sm text-[#CFC9BC]">{def.blurb}</p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span>{p.text}</span>
+              <span className={sc.status === 'won' ? 'text-emerald-300' : sc.status === 'lost' ? 'text-red-300' : 'text-gold'}>{sc.status === 'won' ? 'Complete ✓' : sc.status === 'lost' ? 'Failed' : `Deadline ${formatDate(sc.deadlineT)}`}</span>
+            </div>
+          </Panel>
+        );
+      })()}
+      <Panel title={`Achievements · ${Object.keys(s.achievements ?? {}).length}/${ACHIEVEMENTS.length}`} className="mt-5">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {ACHIEVEMENTS.map((a) => {
+            const t = s.achievements?.[a.id];
+            return (
+              <div key={a.id} className={`rounded-lg border p-2.5 text-sm ${t !== undefined ? 'border-gold/60 bg-gold/10' : 'border-line bg-panel2 opacity-60'}`}>
+                <div className="font-medium">{t !== undefined ? '🏅' : '🔒'} {a.name}</div>
+                <div className="text-xs text-muted">{a.blurb}{t !== undefined ? ` · ${formatDate(t)}` : ''}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <Panel title="Records">
           <R label="Biggest hit" f={rec.biggest} v={rec.biggest && money(rec.biggest.gross)} />

@@ -98,7 +98,14 @@ export type Film = {
   openByMarket?: Partial<Record<Market, number>>;
   facility?: { saving: number; quality: number }; // locked in at greenlight from your studio lot
   acquiredAt?: string; // festival id if bought at a festival market
+  campaign?: CampaignItem[]; // release campaign extras on top of P&A
+  tracking?: { t: number; low: number; high: number }[]; // pre-release opening-weekend tracking (player films)
+  previews?: number; // Thursday-night previews
+  spinoffOf?: string; // series this film was spun out of
+  boughtFrom?: string; // studio id, when you bought the rights from a rival
 };
+
+export type CampaignItem = 'trailer' | 'premiere' | 'tour' | 'tvblitz' | 'social';
 
 // ---------- TV ----------
 
@@ -114,6 +121,7 @@ export type SeriesContract = { channelId: string; guaranteedLeft: number; option
 
 export type SeasonResult = {
   n: number; quality: number; critic: number; audience: number; viewers: number; // avg millions per episode
+  pull?: number; // subscribers it pulled to your own service
   episodes: number; airedFrom: number; feePerEp: number; outcome?: 'renewed' | 'picked up' | 'cancelled' | 'ended' | 'offered renewal';
 };
 
@@ -134,6 +142,8 @@ export type Series = {
   spent: number; revenue: number; syndicated?: boolean; events: string[]; luck: number;
   awards?: AwardResult[]; fyc?: Record<string, number>; buzz?: number;
   lastSeasonStartT?: number; // seasons come round about once a year
+  spinoffOf?: string; // film or series id this was spun out of
+  franchiseId?: string;
 };
 
 export type Script = {
@@ -156,6 +166,8 @@ export type Franchise = {
   id: string; name: string; studioId: string; filmIds: string[];
   heat: number; fatigue: number; isUniverse: boolean;
   licences?: Licence[]; merchTotal?: number;
+  legacyGross?: number; legacyFilms?: number; // films made before the game starts
+  genre?: Genre;
 };
 
 export type LicenceKind = 'toys' | 'game' | 'park';
@@ -210,7 +222,21 @@ export type StreamingService = {
   name: string; launchedT: number; subscribers: number; price: number; churn: number;
   libraryValue: number; history: { t: number; subs: number; revenue: number }[];
   exclusivesBoost: number;
+  adTier?: boolean;
+  licensed?: LicensedTitle[];
 };
+
+/** A rival's film or series licensed onto your service for a while. */
+export type LicensedTitle = { id: string; kind: 'film' | 'series'; title: string; from: string; untilT: number; pull: number };
+
+export type Package = {
+  id: string; agencyId: string; expires: number; title: string; logline: string; primaryGenre: Genre; secondaryGenre?: Genre; tone: Tone; language: string;
+  tier: BudgetTier; budget: number; scriptQuality: number; writerId: string; directorId: string; actorIds: string[]; fees: number; discount: number;
+};
+
+export type LibrarySale = { id: string; studioId: string; filmIds: string[]; price: number; expires: number };
+
+export type Scenario = { id: string; startT: number; deadlineT: number; status: 'active' | 'won' | 'lost' };
 
 export type StudioPersonality = {
   slate: number; genres: Partial<Record<Genre, number>>; risk: number; prestige: number;
@@ -224,6 +250,7 @@ export type Studio = {
   personality?: StudioPersonality;
   streaming?: StreamingService;
   rivalSubs?: number; streamName?: string;
+  boss?: string; bossSince?: number; distressUntil?: number;
 };
 
 export type BoardTarget = {
@@ -309,6 +336,13 @@ export type GameState = {
   facilities?: Partial<Record<FacilityId, FacilityState>>;
   shocks?: Shock[]; // newest last; past ones kept for the history
   nextShockT?: number;
+  scenario?: Scenario;
+  achievements?: Record<string, number>; // id -> turn unlocked
+  agencies?: Record<string, { rel: number; blacklistUntil?: number }>;
+  packages?: Package[];
+  relations?: Record<string, number>; // pairKey -> -10..10, built from working together
+  librarySales?: LibrarySale[];
+  rightsCooldown?: Record<string, number>; // item id -> turn they'll talk again
   idCounter: number;
-  stats: { biddingWars: number; sacked: number };
+  stats: { biddingWars: number; sacked: number; tripleAir?: number };
 };
